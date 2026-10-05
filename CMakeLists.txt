@@ -13,11 +13,11 @@ include(cmake/CPM.cmake)
 
 # Fetch FCG-Framework
 CPMFindPackage(
-	NAME              FCG
-	GITHUB_REPOSITORY brussig-tud/FCG-framework
+	NAME              FCG-Framework
+	GITHUB_REPOSITORY brussig-tud/FCG-Framework
 	GIT_TAG           master
 	OPTIONS
-		"BUILD_SHARED_LIBS OFF"   # <- makes it easier to redistribute executables
+		"BUILD_SHARED_LIBS   OFF" # <- makes it easier to redistribute executables
 		"FCG_BUILD_APP_HELLO OFF" # <- we don't need the example
 )
 

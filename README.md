@@ -15,6 +15,12 @@ This requires CMake 3.31 or newer, Ninja, Git, a C/C++ compiler, and the framewo
 installed FCG package when available, otherwise it currently fetches the framework's `master` branch (will eventually
 pin some specific tag or version).
 
+> **IMPORTANT NOTE** for ***GNOME* users**: Window decorations require *libdecor* development files to be installed. On Ubuntu:
+> ```
+> sudo apt install libdecor-0-dev
+> ```
+> Otherwise, the main window will have no title bar including minimize/maximize/close buttons.
+
 
 ## NOTE to maintainers
 

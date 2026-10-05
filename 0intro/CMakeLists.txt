@@ -3,24 +3,13 @@
 add_executable(0intro)
 
 # Collect sources
-set(SOURCES
-	main.cpp
-	shapes.cpp
-)
+add_subdirectory(src)
 
-# Collect headers
-set(HEADERS
-	shapes.h
-	shapes/convex_poly.h
-	shapes/platonic_solid.h
-)
+# Bake our shaders
+add_subdirectory(shader)
 
-# Add to our target
-target_sources(0intro PRIVATE ${SOURCES})
-target_sources(0intro PRIVATE ${HEADERS})
-
-# Depend on the FCG framework
+# Link the FCG framework
 target_link_libraries(0intro PRIVATE FCG-framework::Core)
 
-# Setup compiler
-target_include_directories(0intro PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+# Setup include paths
+target_include_directories(0intro PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
