@@ -21,5 +21,18 @@ CPMFindPackage(
 		"FCG_BUILD_APPS    OFF" # <- we don't need the example apps
 )
 
+# Make sure we will definitely have access to cpp-embedlib
+if(NOT COMMAND cpp_embedlib_add)
+	message("FCG-Framework did not expose cpp-embedlib, fetching from github")
+	CPMAddPackage(
+		NAME              cpp-embedlib
+		GITHUB_REPOSITORY yhirose/cpp-embedlib
+		GIT_TAG           main
+	)
+endif()
+
+# Make sure subprojects know where the assets are
+cmake_path(SET EXERCISE_ASSET_ROOT NORMALIZE "${CMAKE_CURRENT_LIST_DIR}/assets")
+
 # Add individual exercise targets
 add_subdirectory(0intro)

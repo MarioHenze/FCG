@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <filesystem>
 #include <optional>
+#include <span>
 
 // SDL3 library
 #include <SDL3/SDL.h>
@@ -28,6 +29,9 @@
 #include <FCG/Image/image.h>
 #include <FCG/Image/image_loader.h>
 #include <FCG/Render/quad_renderer.h>
+
+// Baked assets
+#include "0intro_assets.h"
 
 
 
@@ -55,7 +59,7 @@ public:
 	// Interface: fcg::Applet
 
 	[[nodiscard]] auto name () const -> const std::string& override {
-		const static std::string name = "HRD Viewer";
+		const static std::string name = "HDR Viewer";
 		return name;
 	}
 
@@ -84,8 +88,8 @@ public:
 		else
 			throw std::runtime_error(maybeSampler.error().message);
 
-		// Load image initial image
-		loadImage(device, std::filesystem::path(SDL_GetBasePath())/"assets/cgvlogo.png");
+		// Load initial placeholder image
+		loadPlaceholder(device);
 	}
 
 	void onViewportResize (fcg::Device &device, const glm::uvec2 &oldViewportSize, fcg::Player &player) override {
@@ -97,7 +101,7 @@ public:
 		ImGui::SetNextWindowSize({ 0, 0 }, ImGuiCond_FirstUseEver);
 		ImGui::Begin("Image Viewer");
 
-		ImGui::TextUnformatted("assets/cgvlogo.png");
+		ImGui::TextUnformatted(imageFilepath.filename().string().c_str());
 		ImGui::Text("%d × %d pixels", image->width(), image->height());
 
 		ImGui::End();
@@ -124,7 +128,33 @@ protected:
 	////
 	// Methods
 
-	/// Load image from given file.
+	/// \brief Upload the currently loaded image to the GPU.
+	void uploadImage (fcg::Device &device)
+	{
+		// Upload to texture
+		if (auto maybeTex = image->upload(device); maybeTex)
+			texture = std::move(*maybeTex);
+		else
+			throw std::runtime_error(maybeTex.error().message);
+
+		// Configure the quad for displaying our image
+		const std::array position{glm::vec4(0.f, 0.f, 0.f, 1.f)};
+		auto updated = attributes->setAttributes(
+			[&] (fcg::PrimitiveAttributes::Update &update) {
+				update.set<fcg::Attribute::Position>(std::span(position));
+				update.set<fcg::Attribute::Extent>(
+					glm::vec3((float)image->width()/image->height(), 1, 1)
+				);
+				update.set<fcg::Attribute::Orientation>(
+					glm::angleAxis(glm::radians(180.f), glm::vec3(1, 0, 0))
+				);
+			}
+		);
+		if (!updated)
+			throw std::runtime_error(updated.error().message);
+	}
+
+	/// \brief Load image from given file.
 	void loadImage (fcg::Device &device, const std::filesystem::path &filepath)
 	{
 		// Load from file
@@ -133,33 +163,46 @@ protected:
 		else
 			throw std::runtime_error(maybeImage.error().message);
 
-		// Upload to texture
-		if (auto maybeTex = image->upload(device); maybeTex)
-			texture = std::move(*maybeTex);
-		else
-			throw std::runtime_error(maybeTex.error().message);
+		// Upload
+		uploadImage(device);
+	}
 
-		/* create the quad for displaying our image */ {
-			const std::array position{glm::vec4(0.f, 0.f, 0.f, 1.f)};
-			auto updated = attributes->setAttributes(
-				[&] (fcg::PrimitiveAttributes::Update &update) {
-					update.set<fcg::Attribute::Position>(std::span(position));
-					update.set<fcg::Attribute::Extent>(
-						glm::vec3((float)image->width()/image->height(), 1, 1)
-					);
-					update.set<fcg::Attribute::Orientation>(
-						glm::angleAxis(glm::radians(180.f), glm::vec3(1, 0, 0))
-					);
-				}
-			);
-			if (!updated)
-				throw std::runtime_error(updated.error().message);
-		}
+	/// \brief Load the embedded placeholder image
+	void loadPlaceholder (fcg::Device &device)
+	{
+		// Load the placeholder image from memory
+		constexpr auto placeholderVirtualFilePath = "fcgexlogo.png";
+		const auto entry = intro::assets::FS.find(placeholderVirtualFilePath);
+		if (entry == intro::assets::FS.end())
+			throw std::runtime_error(std::format(
+				"Image Viewer: embedded placeholder '{}' is missing", placeholderVirtualFilePath
+			));
+		const auto bytes = (*entry).bytes();
+		if (!bytes)
+			throw std::runtime_error(std::format(
+				"Image Viewer: embedded placeholder '{}' is not a file", placeholderVirtualFilePath
+			));
+		if (auto maybeImage = fcg::ImageLoader::global().load(
+		    	std::as_bytes(*bytes), "png"
+		    ); maybeImage)
+			image = std::move(*maybeImage);
+		else
+			throw std::runtime_error(std::format(
+				"Image Viewer: failed to decode embedded placeholder '{}': {}", placeholderVirtualFilePath,
+				maybeImage.error().message
+			));
+		imageFilepath = "<no image loaded>";
+
+		// Upload
+		uploadImage(device);
 	}
 
 
 	////
 	// Fields
+
+	/// The filepath of the currently loaded image
+	std::filesystem::path imageFilepath;
 
 	/// The CPU-side image which we can manipulate pixels on.
 	std::optional<fcg::Image> image;
