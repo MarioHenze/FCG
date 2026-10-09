@@ -102,7 +102,7 @@ public:
 	void gui (fcg::Device &device, fcg::Player &player) override
 	{
 		// Start our widget
-		ImGui::SetNextWindowSize({ 0, 0 }, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({ 480, 0 }, ImGuiCond_FirstUseEver);
 		ImGui::Begin("Image Loader");
 
 		// File selection
@@ -154,7 +154,8 @@ protected:
 		// Configure the quad for displaying our image
 		const std::array position{glm::vec4(0.f, 0.f, 0.f, 1.f)};
 		auto updated = attributes->setAttributes(
-			[&] (fcg::PrimitiveAttributes::Update &update) {
+			[&] (fcg::PrimitiveAttributes::Update &update)
+			{
 				update.set<fcg::Attribute::Position>(std::span(position));
 				update.set<fcg::Attribute::Extent>(
 					glm::vec3((float)image->width()/image->height(), 1, 1)
@@ -177,7 +178,10 @@ protected:
 			imageFilepath = filepath;
 		}
 		else
-			throw std::runtime_error(maybeImage.error().message);
+			SDL_LogError(
+				SDL_LOG_CATEGORY_APPLICATION, "HDRViewerApplet: failed to load image '%s'\n%s",
+				filepath.string().c_str(), maybeImage.error().message.c_str()
+			);
 
 		// Upload
 		uploadImage(device);
@@ -186,7 +190,7 @@ protected:
 	/// \brief Load the embedded placeholder image
 	void loadPlaceholder (fcg::Device &device)
 	{
-		// Load the placeholder image from memory
+		// Fetch the placeholder image blob from the baked assets
 		constexpr auto placeholderVirtualFilePath = "fcgexlogo.png";
 		const auto entry = intro::assets::FS.find(placeholderVirtualFilePath);
 		if (entry == intro::assets::FS.end())
@@ -198,6 +202,8 @@ protected:
 			throw std::runtime_error(std::format(
 				"Image Viewer: embedded placeholder '{}' is not a file", placeholderVirtualFilePath
 			));
+
+		// Decode the placeholder image from memory
 		if (auto maybeImage = fcg::ImageLoader::global().load(
 		    	std::as_bytes(*bytes), "png"
 		    ); maybeImage)
@@ -213,18 +219,14 @@ protected:
 		uploadImage(device);
 	}
 
-	/// Open one file with a fresh snapshot of the singleton registry's format metadata.
+	/// \brief Open one file with a fresh snapshot of the singleton registry's format metadata.
 	void openImage (fcg::Player &player)
 	{
 		// Open the file dialog
-		auto future = fcg::extra::showOpenFileDialog(fcg::extra::FileDialogOptions {
+		auto selected = *fcg::extra::showOpenFileDialog(fcg::extra::FileDialogOptions {
 			.parent=player.mainWindow(), .title="Open image",
 			.filters=fcg::extra::imageFileFilters(fcg::ImageLoader::global().fileFormats())
 		});
-
-		// Block until the user made some sort of choice
-		future.wait();
-		auto selected = *future.get();
 
 		// Try to load the selected image if any
 		if (!selected.paths.empty() && !selected.paths.front().empty())
