@@ -8,7 +8,7 @@ blabla intro bla blub
 To configure the exercises and the framework, run:
 
 ```sh
-cmake -S . -B build-vscode -G Ninja
+cmake -S . -B build
 ```
 
 This requires CMake 3.31 or newer, Ninja, Git, a C/C++ compiler, and the framework's platform dependencies. CPM uses an
