@@ -3,7 +3,9 @@
 add_executable(0intro)
 
 # Depend on the FCG framework
-target_link_libraries(0intro PRIVATE Core Image Render)
+target_link_libraries(0intro PRIVATE
+	FCG-Framework::Core FCG-Framework::Render FCG-Framework::Image FCG-Framework::Extras
+)
 
 # Collect sources
 add_subdirectory(src)

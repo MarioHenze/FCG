@@ -36,7 +36,7 @@
 // Classes
 //
 
-/// Displays an image and
+/// \brief Displays High-dynamic-range images with various options for tone-mapping and gamma correction.
 class HDRViewerApplet : public fcg::Applet
 {
 public:
