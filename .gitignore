@@ -23,10 +23,6 @@
 *.dll
 *.so.*
 
-# Fortran module files
-*.mod
-*.smod
-
 # Compiled Static libraries
 *.lai
 *.la
@@ -37,11 +33,6 @@
 *.exe
 *.out
 *.app
-
-# Build directories
-build/
-Build/
-build-*/
 
 # CMake generated files
 CMakeFiles/
@@ -67,6 +58,15 @@ vcpkg_installed/
 Testing/
 .cache/
 
+# Build directories
+build*/
+Build*/
+
 # IDE artifacts
+.vs
 .vscode
 .idea
+
+# User-local CMake settings (machine-specific overrides)
+CMakeUserPresets.json
+CMakeSettings.json
