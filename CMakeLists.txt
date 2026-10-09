@@ -15,10 +15,12 @@ include(cmake/CPM.cmake)
 CPMFindPackage(
 	NAME              FCG-Framework
 	GITHUB_REPOSITORY brussig-tud/FCG-Framework
-	GIT_TAG           f54c6c988493960facba7833fc0cfb5777d86405
+	GIT_TAG           4cb50b386ac1c3d85cdec670565e8c0b13abede1
 	OPTIONS
 		"BUILD_SHARED_LIBS OFF" # <- makes it easier to redistribute executables
 		"FCG_BUILD_APPS    OFF" # <- we don't need the example apps
+		"SDLIMAGE_AVIF     ON"  # <- enable AVIF decoding in the SDL_image backend
+		"SDLIMAGE_STRICT   ON"  # <- fail configuration if our selected decoders can not be enabled
 )
 
 # Make sure we will definitely have access to cpp-embedlib

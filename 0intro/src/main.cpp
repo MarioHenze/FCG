@@ -20,6 +20,7 @@
 
 // Dear ImGui
 #include <imgui.h>
+#include <misc/cpp/imgui_stdlib.h>
 
 // FCG Framework
 #include <FCG/run.h>
@@ -29,6 +30,8 @@
 #include <FCG/Image/image.h>
 #include <FCG/Image/image_loader.h>
 #include <FCG/Render/quad_renderer.h>
+#include <FCG/Extras/file_dialog.h>
+#include <FCG/Extras/file_filters.h>
 
 // Baked assets
 #include "0intro_assets.h"
@@ -98,12 +101,23 @@ public:
 
 	void gui (fcg::Device &device, fcg::Player &player) override
 	{
+		// Start our widget
 		ImGui::SetNextWindowSize({ 0, 0 }, ImGuiCond_FirstUseEver);
-		ImGui::Begin("Image Viewer");
+		ImGui::Begin("Image Loader");
 
-		ImGui::TextUnformatted(imageFilepath.filename().string().c_str());
+		// File selection
+		ImGui::BeginDisabled(); {
+			auto filename = imageFilepath.filename().string();
+			ImGui::InputText("##imageFilepath", &filename);
+		} ImGui::EndDisabled();
+		ImGui::SameLine();
+		if (ImGui::Button("..."))
+			openImage(player);
+
+		// Image metadata
 		ImGui::Text("%d × %d pixels", image->width(), image->height());
 
+		// Finalize our widget
 		ImGui::End();
 	}
 
@@ -158,8 +172,10 @@ protected:
 	void loadImage (fcg::Device &device, const std::filesystem::path &filepath)
 	{
 		// Load from file
-		if (auto maybeImage = fcg::ImageLoader::global().load(filepath); maybeImage)
+		if (auto maybeImage = fcg::ImageLoader::global().load(filepath); maybeImage) {
 			image = std::move(*maybeImage);
+			imageFilepath = filepath;
+		}
 		else
 			throw std::runtime_error(maybeImage.error().message);
 
@@ -197,6 +213,24 @@ protected:
 		uploadImage(device);
 	}
 
+	/// Open one file with a fresh snapshot of the singleton registry's format metadata.
+	void openImage (fcg::Player &player)
+	{
+		// Open the file dialog
+		auto future = fcg::extra::showOpenFileDialog(fcg::extra::FileDialogOptions {
+			.parent=player.mainWindow(), .title="Open image",
+			.filters=fcg::extra::imageFileFilters(fcg::ImageLoader::global().fileFormats())
+		});
+
+		// Block until the user made some sort of choice
+		future.wait();
+		auto selected = *future.get();
+
+		// Try to load the selected image if any
+		if (!selected.paths.empty() && !selected.paths.front().empty())
+			loadImage(player.device(), selected.paths.front());
+	}
+
 
 	////
 	// Fields
@@ -230,7 +264,7 @@ protected:
 /// Program entry point.
 auto main () -> int {
 	// Run with 2D camera and our image viewer applet
-	return fcg::run<fcg::applet::Camera2D, HDRViewerApplet>(fcg::PlayerSettings{
+	return fcg::run<fcg::applet::Camera2D, HDRViewerApplet>(fcg::PlayerSettings {
 		.mainWindowTitle="FCG Intro Exercise - HDR and color spaces"
 	});
 }
