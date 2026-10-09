@@ -61,6 +61,7 @@ Testing/
 # Build directories
 build*/
 Build*/
+out*/
 
 # IDE artifacts
 .vs
