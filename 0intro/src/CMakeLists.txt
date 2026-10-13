@@ -2,6 +2,7 @@
 # Collect sources
 set(SOURCES
 	main.cpp
+	image_metadata.cpp
 )
 
 # Add to our target
