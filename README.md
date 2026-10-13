@@ -15,6 +15,10 @@ cmake --build --preset debug
 
 The build tree ends up in `build/debug`; use the `release` preset for an optimized build.
 
+> **NOTE** for **Visual Studio**/**Code** users: both Microsoft IDEs have excellent multi-config generator support, and their respective C++ support ships with the lightning-fast *Ninja* build tool.
+>
+> We provide a **user-override** `CMakeUserPresets-msvc.json` which you can copy-rename to `CMakeUserPresets.json` to enable `Debug-ninja` and `Release-ninja` presets that integrate well with the configuration switcher GUI of these IDEs. Both configurations will use a shared build tree called `build-vs`.
+
 This requires CMake 3.31 or newer, Git, a C/C++ compiler, and the framework's platform dependencies. CPM uses an
 installed FCG package when available, otherwise it currently fetches the framework's `master` branch (will eventually
 pin some specific tag or version).
