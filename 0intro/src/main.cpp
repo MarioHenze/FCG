@@ -7,10 +7,12 @@
 // C++ STL
 #include <format>
 #include <array>
+#include <expected>
 #include <stdexcept>
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <utility>
 
 // SDL3 library
 #include <SDL3/SDL.h>
@@ -26,6 +28,8 @@
 #include <FCG/run.h>
 #include <FCG/player.h>
 #include <FCG/applet.h>
+#include <FCG/frame.h>
+#include <FCG/fullscreen.h>
 #include <FCG/applet/camera_2d.h>
 #include <FCG/Image/image.h>
 #include <FCG/Image/image_loader.h>
@@ -68,6 +72,9 @@ public:
 
 	void init (fcg::Device &device, fcg::Player &player) override
 	{
+		// Set black clear color
+		player.clearColor() = {0, 0, 0, 1};
+
 		// Init our quad renderer
 		if (auto maybeQr
 		    = fcg::QuadRenderer::create(player, {.alphaBlending=true}); maybeQr)
@@ -117,6 +124,10 @@ public:
 		// Image metadata
 		ImGui::Text("%d × %d pixels", image->width(), image->height());
 
+		// Scene presentation
+		if (ImGui::Checkbox("Use built-in sRGB conversion", &useBuiltinSRGB))
+			updatePresentation(device, player);
+
 		// Finalize our widget
 		ImGui::End();
 	}
@@ -141,6 +152,38 @@ protected:
 
 	////
 	// Methods
+
+	/// \brief Apply the selected conversion to the final scene presentation.
+	void updatePresentation (fcg::Device &device, fcg::Player &player)
+	{
+		// If enabled, remove our linear override
+		if (useBuiltinSRGB) {
+			player.clearPresentationRecorder();
+			return;
+		}
+
+		// Obtain a no-op presentation pass
+		auto passthroughPresenter = fcg::FullscreenPass::passthrough(
+			device, player.swapchainFormat()
+		);
+		if (!passthroughPresenter)
+			throw std::runtime_error(std::format(
+				"HDRViewerApplet: failed to create passthrough presentation pass: {}",
+				passthroughPresenter.error().message
+			));
+
+		// Instruct the player to use our no-op presentation pass
+		player.setPresentationRecorder(
+			[passthroughPresenter = std::move(*passthroughPresenter)] (const fcg::PresentationContext &context)
+				-> std::expected<void, fcg::FullscreenError>
+			{
+				// Sampling the current sRGB scene texture decodes its stored colors to linear RGB.
+				const fcg::FullscreenTextureBinding binding{&context.scene, &context.sceneSampler};
+				const fcg::FullscreenBindings bindings{.samplers = {&binding, 1}};
+				return passthroughPresenter.record(context.cmdBuffer, context.target, bindings);
+			}
+		);
+	}
 
 	/// \brief Upload the currently loaded image to the GPU.
 	void uploadImage (fcg::Device &device)
@@ -236,6 +279,9 @@ protected:
 
 	////
 	// Fields
+
+	/// Whether to use the built-in linear RGB to sRGB conversion for visually checking your custom conversion
+	bool useBuiltinSRGB = true;
 
 	/// The filepath of the currently loaded image
 	std::filesystem::path imageFilepath;
