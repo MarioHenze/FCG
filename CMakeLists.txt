@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.31)
 
+# Refuse in-source builds: they pollute the source tree and break later configurations.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+	message(FATAL_ERROR
+		"In-source builds are not allowed. Configure into a separate directory, "
+		"for example with the provided presets: cmake --preset debug")
+endif()
+
 # Setup CMake project
 project(FCG)
 

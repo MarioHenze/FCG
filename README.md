@@ -5,13 +5,17 @@ blabla intro bla blub
 
 ## Building
 
-To configure the exercises and the framework, run:
+The repository ships a `CMakePresets.json` with a static `debug` and `release` configuration.
+To configure and build the exercises, run:
 
 ```sh
-cmake -S . -B build
+cmake --preset debug
+cmake --build --preset debug
 ```
 
-This requires CMake 3.31 or newer, Ninja, Git, a C/C++ compiler, and the framework's platform dependencies. CPM uses an
+The build tree ends up in `build/debug`; use the `release` preset for an optimized build.
+
+This requires CMake 3.31 or newer, Git, a C/C++ compiler, and the framework's platform dependencies. CPM uses an
 installed FCG package when available, otherwise it currently fetches the framework's `master` branch (will eventually
 pin some specific tag or version).
 
