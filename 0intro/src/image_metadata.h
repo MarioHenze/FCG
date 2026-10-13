@@ -8,6 +8,7 @@
 // Forward declarations
 //
 
+// Framework types
 namespace fcg {
 	class Image;
 }
@@ -20,7 +21,7 @@ namespace fcg {
 //
 
 /// Draw decoded CPU image metadata inside the current ImGui window without changing the image.
-void drawImageMetadata (const fcg::Image &image);
+void displayImageMetadata (const fcg::Image &image);
 
 
 #endif // ifndef __0INTRO_IMAGE_METADATA_H__
