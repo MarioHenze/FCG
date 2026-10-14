@@ -1,0 +1,108 @@
+name: build
+
+on:
+  push:
+    branches: [main, 'ci-*']
+    paths-ignore: ["**.md"]
+  pull_request:
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # CPM clones every third-party dependency (the framework checkout, and everything it pulls in) into this
+  # directory; caching it keeps later runs off the network.
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+  # Compiler cache directory. The size cap keeps each cached entry small, so entries do not churn against the
+  # repository's cache quota.
+  SCCACHE_DIR: ${{ github.workspace }}/.sccache
+  SCCACHE_CACHE_SIZE: 1G
+
+jobs:
+  buildability:
+    name: buildability (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-26.04
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Ninja drives cl.exe, which the default Windows shell does not expose.
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+
+      # The pinned SDL3 is newer than any distribution package, so it is always built from source and its
+      # configure step needs the X11/Wayland development libraries on Linux.
+      - name: Install build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sccache \
+            libasound2-dev libdecor-0-dev libdrm-dev libgbm-dev libpulse-dev libudev-dev \
+            libwayland-dev libx11-dev libxcursor-dev libxext-dev libxfixes-dev libxi-dev \
+            libxinerama-dev libxkbcommon-dev libxrandr-dev
+
+      # sccache is taken from the native package manager, never from a third-party action, so nothing here
+      # depends on the Actions cache backend.
+      - name: Install sccache (macOS)
+        if: runner.os == 'macOS'
+        run: brew install sccache
+
+      # Chocolatey only packages sccache 0.9 (2023), which predates current MSVC, so pin the official release.
+      - name: Install sccache (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/mozilla/sccache/releases/download/v0.18.0/sccache-v0.18.0-x86_64-pc-windows-msvc.zip" -OutFile sccache.zip
+          Expand-Archive sccache.zip -DestinationPath "$env:RUNNER_TEMP/sccache-dist"
+          $bin = Get-ChildItem "$env:RUNNER_TEMP/sccache-dist" -Recurse -Filter sccache.exe | Select-Object -First 1
+          Add-Content -Path $env:GITHUB_PATH -Value $bin.DirectoryName
+
+      # Dependency sources are immutable per pin, so the key is a content hash of the files that name the pins:
+      # the CPM bootstrap and CMakeLists.txt (which fixes the framework commit that names everything downstream).
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.CPM_SOURCE_CACHE }}
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', 'CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
+      # Deliberately a second cache: dependency sources are immutable per pin (content key, written once), while
+      # the compiler cache accumulates (rolling key, newest restored first, bounded by SCCACHE_CACHE_SIZE).
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: sccache-${{ runner.os }}-
+
+      # The launcher is passed on the command line rather than through the environment so that it applies to this
+      # build tree only. MSVC is asked for embedded debug information (/Z7) to avoid its shared-PDB race (C1041)
+      # under sccache; the setting is ignored by the non-MSVC compilers.
+      - name: Configure
+        run: >
+          cmake --preset debug -G Ninja
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
+
+      # The point of this pipeline is buildability: the exercises ship no test suite of their own, so a clean
+      # configure-and-build of the debug preset on all three platforms is the whole check.
+      - name: Build
+        run: cmake --build --preset debug
+
+      # Stop the server so the post-job cache upload never sees open files, and report the hit rate.
+      - name: sccache stats
+        if: always()
+        run: |
+          sccache --show-stats
+          sccache --stop-server || true
