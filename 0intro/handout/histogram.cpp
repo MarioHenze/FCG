@@ -13,7 +13,6 @@
 #include <cmath>
 #include <cstddef>
 #include <expected>
-#include <format>
 #include <stdexcept>
 
 // Dear ImGui
@@ -36,8 +35,7 @@
 // Anonymous namespace begin
 namespace {
 
-/// Plot identifiers and colors, one per color channel.
-constexpr std::array channelNames{"R", "G", "B"};
+/// Plot colors, one per color channel.
 constexpr std::array channelColors{
 	ImVec4{1.f, .30f, .30f, 1.f}, ImVec4{.35f, .95f, .35f, 1.f}, ImVec4{.40f, .60f, 1.f, 1.f}
 };
@@ -151,10 +149,8 @@ void HistogramView::plotChannel (const Histogram &histogram, int channel, float 
 	// ImGui identifies plots by their label, so the two columns need separate IDs for the same channel.
 	ImGui::PushID(&histogram);
 	ImGui::PushID(channel);
-	const auto overlay = std::format("{} {:.1f}%", channelNames[channel],
-		100.f * peak / float(histogram.samples));
 	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, channelColors[channel]);
-	ImGui::PlotHistogram("##bins", plot.data(), int(plot.size()), 0, overlay.c_str(), .0f, 1.f,
+	ImGui::PlotHistogram("##bins", plot.data(), int(plot.size()), 0, nullptr, .0f, 1.f,
 		ImVec2(width, 64.f));
 	ImGui::PopStyleColor();
 	ImGui::PopID();
