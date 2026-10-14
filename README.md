@@ -33,3 +33,19 @@ pin some specific tag or version).
 *FCG-Framework* installation rules default to disabled when embedded (via `FetchContent` or `CPM`), and enabled when
 built standalone. Pass  `-DFCG_INCLUDE_PACKAGING=ON` to opt into framework installation from an embedded build.
 `FCG_INSTALL_CMAKEDIR` overrides the package installation directory when packaging is enabled.
+
+The exercise sources in `0intro/src` are the reference solution and the single source of truth. The student version
+in `0intro/handout` is generated from them by `tools/elide.py`, which replaces each marked region with the prompt the
+students get. Edit `0intro/src`, run `python3 tools/elide.py 0intro/src 0intro/handout`, and commit both trees; CI
+checks that the scaffold is current. Both variants build, as `0intro` and `0intro_solution`.
+
+Point Git at the hooks in this repository once per clone, and a commit that touches the solution regenerates the
+scaffold by itself:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook ignores commits that do not touch the solution, so it stays out of the way of anyone working in the scaffold.
+It also skips regeneration when the solution has changes that are not staged: the scaffold would otherwise describe
+text that the commit does not contain, and CI reports that instead.

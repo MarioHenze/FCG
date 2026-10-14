@@ -1,0 +1,66 @@
+#!/bin/sh
+
+# Keep the generated student scaffold in step with the solution it is derived from.
+#
+# Enable once per clone with
+#
+#     git config core.hooksPath .githooks
+#
+# The scaffold is generated, so it is never edited by hand; this hook regenerates it whenever a commit touches the
+# solution, and stages the result so the commit contains both. Commits that only touch the scaffold - a student
+# filling in the TODOs, for example - are left alone, so enabling the hook is harmless for anyone working there.
+
+set -e
+
+GENERATOR=tools/elide.py
+
+regenerate () {
+	src=$1
+	dest=$2
+
+	# Only a commit that touches the solution or the generator can change the scaffold.
+	staged=$(git diff --cached --name-only -- "$src" "$GENERATOR")
+	if [ -z "$staged" ]; then
+		return 0
+	fi
+
+	# The generator reads the working tree, so a partly staged solution would put text into the scaffold that this
+	# commit does not contain. Leaving it alone keeps the commit consistent; CI reports the staleness afterwards.
+	untracked=$(git ls-files --others --exclude-standard -- "$src")
+	if ! git diff --quiet -- "$src" || [ -n "$untracked" ]; then
+		echo "pre-commit: $src has changes that are not staged, leaving $dest alone" >&2
+		echo "pre-commit: the scaffold may now be stale, and CI will report that; run" >&2
+		echo "pre-commit:   python3 $GENERATOR $src $dest" >&2
+		return 0
+	fi
+
+	if ! python3 "$GENERATOR" "$src" "$dest" --quiet; then
+		echo "pre-commit: '$GENERATOR $src $dest' failed, aborting the commit" >&2
+		return 1
+	fi
+
+	# The generator owns the whole destination tree: it rewrites every file it generates and deletes the ones it no
+	# longer produces, so staging the tree stages exactly what it wrote. Report only a regeneration that actually
+	# changed something, so a commit that merely carries the scaffold along stays quiet.
+	if [ -d "$dest" ]; then
+		modified=$(git diff --name-only -- "$dest")
+		added=$(git ls-files --others --exclude-standard -- "$dest")
+		git add -A -- "$dest"
+		if [ -n "$modified$added" ]; then
+			echo "pre-commit: regenerated $dest"
+			if [ -n "$modified" ]; then
+				printf '%s\n' "$modified"
+			fi
+			if [ -n "$added" ]; then
+				printf '%s\n' "$added"
+			fi
+		fi
+	fi
+}
+
+if ! command -v python3 >/dev/null 2>&1; then
+	echo "pre-commit: python3 not found, skipping the scaffold check" >&2
+	exit 0
+fi
+
+regenerate 0intro/src 0intro/handout
