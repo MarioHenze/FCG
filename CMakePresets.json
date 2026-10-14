@@ -26,14 +26,26 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "ninja",
+      "inherits": "base",
+      "displayName": "Ninja Multi-Config",
+      "description": "Builds Debug and Release into a single tree, so an IDE's configuration switcher can flip between them without reconfiguring. Requires Ninja on PATH. Select the configuration with the ninja-debug / ninja-release build preset: a multi-config generator ignores CMAKE_BUILD_TYPE.",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build-ninja"
     }
   ],
   "buildPresets": [
     { "name": "debug", "configurePreset": "debug", "configuration": "Debug", "jobs": 0 },
-    { "name": "release", "configurePreset": "release", "configuration": "Release", "jobs": 0 }
+    { "name": "release", "configurePreset": "release", "configuration": "Release", "jobs": 0 },
+    { "name": "ninja-debug", "configurePreset": "ninja", "configuration": "Debug", "jobs": 0 },
+    { "name": "ninja-release", "configurePreset": "ninja", "configuration": "Release", "jobs": 0 }
   ],
   "testPresets": [
     { "name": "debug", "configurePreset": "debug", "configuration": "Debug", "output": { "outputOnFailure": true } },
-    { "name": "release", "configurePreset": "release", "configuration": "Release", "output": { "outputOnFailure": true } }
+    { "name": "release", "configurePreset": "release", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "ninja-debug", "configurePreset": "ninja", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "ninja-release", "configurePreset": "ninja", "configuration": "Release", "output": { "outputOnFailure": true } }
   ]
 }
