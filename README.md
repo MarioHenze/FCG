@@ -1,6 +1,39 @@
 # Practical exercises *Foundations of Computer Graphics*
 
-blabla intro bla blub
+## Working on an exercise
+
+Each exercise lives in its own numbered folder and builds into two executables:
+
+- **`0intro`** is your program. Implement the parts marked `TODO` in `0intro/handout/`, and leave everything else
+  alone: `0intro/src/` holds the given code, most of which your program compiles as it is.
+- **`0intro_solution`** is the reference implementation, built from `0intro/src/` without the gaps. Run it next to
+  your own to compare, and read `0intro/src/` whenever you are stuck - the pieces you are asked to write are in
+  there, which is deliberate.
+
+The first exercise is a viewer for low- and high-dynamic-range images. It decodes an image, uploads it, and applies
+gamma correction on the CPU, or lets the GPU do the sRGB conversion instead. Its histogram panel is the part left
+for you: `binImage` in `0intro/handout/histogram.cpp` has to walk the image's pixels and count how often each code
+value occurs per channel. The panel works before you start, and says so: until your implementation runs, it reports
+that the histogram is unavailable, and the viewer keeps working.
+
+Build and run one of the two, for example with the `debug` preset:
+
+```sh
+cmake --preset debug
+cmake --build --preset debug --target 0intro
+./build/debug/bin/0intro
+```
+
+Both executables end up in the `bin/` directory of the preset's build tree, with one subdirectory per configuration
+when using the multi-config `ninja` preset (`build-ninja/bin/Debug/0intro`).
+
+The framework's API documentation is hosted at <https://brussig-tud.github.io/FCG-framework/>. For this exercise, the
+[Image library overview][image] and, in particular, the module on
+[scoped native pixel access][pixels] are the relevant parts; the viewer itself uses the applet, render and extras
+libraries, whose overviews are linked from the same page.
+
+[image]: https://brussig-tud.github.io/FCG-framework/fcg_image_overview.html
+[pixels]: https://brussig-tud.github.io/FCG-framework/group__fcg__pixel__access.html
 
 
 ## Building
@@ -18,8 +51,8 @@ The build tree ends up in `build/debug`; use the `release` preset for an optimiz
 > **NOTE** for users of IDEs with a configuration switcher (Visual Studio, VS Code): the `ninja` preset builds with *Ninja Multi-Config* into a single `build-ninja` tree that holds both configurations side by side, which is what the configuration switcher GUI of these IDEs handles best, and *Ninja* builds considerably faster than MSBuild or make. Configure with `cmake --preset ninja`, then pick a configuration with `cmake --build --preset ninja-debug` (or `ninja-release`). This only needs `ninja` on `PATH`; the plain `debug` and `release` presets keep working without it.
 
 This requires CMake 3.31 or newer, Git, a C/C++ compiler, and the framework's platform dependencies. CPM uses an
-installed FCG package when available, otherwise it currently fetches the framework's `master` branch (will eventually
-pin some specific tag or version).
+installed FCG package when available, and otherwise fetches the framework revision pinned in `CMakeLists.txt`. The
+first configure therefore downloads the framework and its own dependencies, which takes a few minutes.
 
 > **IMPORTANT NOTE** for ***GNOME* users**: Window decorations require *libdecor* development files to be installed. On Ubuntu:
 > ```
@@ -50,3 +83,9 @@ The hook ignores commits that do not touch the solution, so it stays out of the 
 It refuses a commit that touches the solution while that solution still has unstaged or untracked changes, because it
 cannot tell which text such a commit would contain; stage those changes in the same commit, or bypass the check with
 `git commit --no-verify`.
+
+Exercises are frozen once they are handed out: students work in the scaffold, so regenerating an exercise that is
+already in use would clash with their edits. The generator is meant for exercises still under development.
+
+A new exercise needs its solution/scaffold pair added in two places: the `regenerate` call at the end of
+`.githooks/pre-commit`, and the check step in `.github/workflows/ci.yml`.
