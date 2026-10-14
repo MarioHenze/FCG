@@ -40,7 +40,9 @@
 #include <FCG/Extras/file_filters.h>
 
 // Local includes
+#include "histogram.h"
 #include "image_metadata.h"
+#include "srgb.h"
 
 // Baked assets
 #include "0intro_assets.h"
@@ -144,8 +146,12 @@ public:
 		ImGui::Begin("sRGB & Gamma");
 
 		// Where to apply gamma
-		if (ImGui::Checkbox("Use built-in sRGB conversion", &useBuiltinSRGB))
+		if (ImGui::Checkbox("Use built-in sRGB conversion", &useBuiltinSRGB)) {
 			updatePresentation(device, player);
+			// The built-in conversion always uses the standard sRGB exponent, so the display distribution
+			// follows this checkbox and not only the sliders.
+			updateHistograms();
+		}
 		ImGui::SetItemTooltip(
 			"NOTE: Since built-in performs sRGB conversion after texture filtering, the result\nwill slightly"
 			" differ from the CPU computation, which happens before texture filtering."
@@ -180,9 +186,15 @@ public:
 			ImGui::TextWrapped("Ctrl+click a gamma slider to type a value.");
 
 			// Perform update right here
-			if (gammaChanged)
+			if (gammaChanged) {
 				updateGammaCorrection(device);
+				updateHistograms();
+			}
 		} ImGui::EndDisabled();
+
+		// What the sliders above do to the distribution of the display codes
+		ImGui::SeparatorText("Histogram");
+		histogramView.draw(inputHistogram, displayHistogram);
 
 		// Finalize the gamma widget
 		ImGui::End();
@@ -316,6 +328,8 @@ protected:
 		correctedImage.reset();
 		correctedTexture.reset();
 		updateGammaCorrection(device);
+		// A new image brings new light values, so its input distribution is recomputed as well
+		updateHistograms(/* inputChanged: */ true);
 
 		// Upload to texture
 		if (auto maybeTex = image->upload(device); maybeTex)
@@ -343,23 +357,36 @@ protected:
 			throw std::runtime_error(updated.error().message);
 	}
 
-	/// \brief Encode one linear RGB component using the sRGB curve with an adjustable reciprocal gamma.
-	static auto encodeSRGB (float linear, float inverseGamma) -> float
+	/// \brief
+	/// 	Recomputes the histograms that the GUI panel draws.
+	///
+	/// The input distribution only depends on the light values of the image, so it is refreshed when a new image
+	/// is loaded, while the display distribution always follows the gamma that is currently effective. While the
+	/// built-in sRGB conversion is selected, that gamma is the standard 2.4 exponent, whatever the sliders hold.
+	///
+	/// A computation that fails is logged and leaves an empty histogram behind: the panel is a diagnostic, so it
+	/// must not keep the viewer from running.
+	///
+	/// \param inputChanged
+	/// 	Whether a different image was loaded since the previous call.
+	void updateHistograms (bool inputChanged = false)
 	{
-		// Linear RGB is proportional to light intensity; sRGB uses nonlinear display codes. A single power such as
-		// x^(1/2.2) only approximates the actual piecewise sRGB curve.
-		// Here, we're matching the SDR target range of the built-in sRGB conversion (which we can opt-out of via the
-		// GUI): negative values become black, values above 1 becomewhite.
-		const float x = std::clamp(linear, .0f, 1.f);
+		if (!linearImage)
+			return;
 
-		// Near black, sRGB uses a linear segment rather than a power with a very steep slope at zero.
-		// The breakpoint 0.0031308 and scale 12.92 are fixed sRGB constants, independent of our gamma sliders.
-		if (x <= .0031308f)
-			return 12.92f * x;
-
-		// Standard sRGB uses exponent 1/2.4, with scale 1.055 and offset 0.055 joining the two segments. Other gamma
-		// values vary only this exponent: the resulting curve can jump at the breakpoint.
-		return 1.055f * std::pow(x, inverseGamma) - .055f;
+		try {
+			if (inputChanged)
+				computeHistogram(*linearImage, inputHistogram);
+			const auto effective = useBuiltinSRGB ? std::array{2.4f, 2.4f, 2.4f} : channelGamma;
+			computeDisplayHistogram(*linearImage, effective, displayHistogram);
+		}
+		catch (const std::exception &problem) {
+			inputHistogram = Histogram{};
+			displayHistogram = Histogram{};
+			SDL_LogError(
+				SDL_LOG_CATEGORY_APPLICATION, "HDRViewerApplet: histogram unavailable: %s\n", problem.what()
+			);
+		}
 	}
 
 	/// \brief Apply the piecewise sRGB curve per channel from the unchanged linear source and upload the result.
@@ -462,6 +489,15 @@ protected:
 
 	/// One image quad's transform.
 	std::optional<fcg::PrimitiveAttributes> attributes;
+
+	/// Light value distribution of the current image; independent of the gamma sliders.
+	Histogram inputHistogram;
+
+	/// Display code distribution at the gamma that is currently effective.
+	Histogram displayHistogram;
+
+	/// View settings of the histogram panel, such as logarithmic scaling.
+	HistogramView histogramView;
 };
 
 
