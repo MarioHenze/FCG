@@ -25,13 +25,12 @@ regenerate () {
 	fi
 
 	# The generator reads the working tree, so a partly staged solution would put text into the scaffold that this
-	# commit does not contain. Leaving it alone keeps the commit consistent; CI reports the staleness afterwards.
+	# commit does not contain. Refusing is the honest answer: the caller either stages the rest, or bypasses the check.
 	untracked=$(git ls-files --others --exclude-standard -- "$src")
 	if ! git diff --quiet -- "$src" || [ -n "$untracked" ]; then
-		echo "pre-commit: $src has changes that are not staged, leaving $dest alone" >&2
-		echo "pre-commit: the scaffold may now be stale, and CI will report that; run" >&2
-		echo "pre-commit:   python3 $GENERATOR $src $dest" >&2
-		return 0
+		echo "pre-commit: $src has changes that are not staged, so $dest cannot be regenerated" >&2
+		echo "pre-commit: stage them in the same commit, or commit with 'git commit --no-verify'" >&2
+		return 1
 	fi
 
 	if ! python3 "$GENERATOR" "$src" "$dest" --quiet; then

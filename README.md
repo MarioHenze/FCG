@@ -47,5 +47,6 @@ git config core.hooksPath .githooks
 ```
 
 The hook ignores commits that do not touch the solution, so it stays out of the way of anyone working in the scaffold.
-It also skips regeneration when the solution has changes that are not staged: the scaffold would otherwise describe
-text that the commit does not contain, and CI reports that instead.
+It refuses a commit that touches the solution while that solution still has unstaged or untracked changes, because it
+cannot tell which text such a commit would contain; stage those changes in the same commit, or bypass the check with
+`git commit --no-verify`.
