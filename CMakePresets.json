@@ -37,10 +37,10 @@
     }
   ],
   "buildPresets": [
-    { "name": "debug", "configurePreset": "debug", "configuration": "Debug", "jobs": 0 },
-    { "name": "release", "configurePreset": "release", "configuration": "Release", "jobs": 0 },
-    { "name": "ninja-debug", "configurePreset": "ninja", "configuration": "Debug", "jobs": 0 },
-    { "name": "ninja-release", "configurePreset": "ninja", "configuration": "Release", "jobs": 0 }
+    { "name": "debug", "configurePreset": "debug", "configuration": "Debug"},
+    { "name": "release", "configurePreset": "release", "configuration": "Release"},
+    { "name": "ninja-debug", "configurePreset": "ninja", "configuration": "Debug"},
+    { "name": "ninja-release", "configurePreset": "ninja", "configuration": "Release"}
   ],
   "testPresets": [
     { "name": "debug", "configurePreset": "debug", "configuration": "Debug", "output": { "outputOnFailure": true } },
