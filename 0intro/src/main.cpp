@@ -115,13 +115,16 @@ public:
 
 	void gui (fcg::Device &device, fcg::Player &player) override
 	{
+		constexpr float initialWindowWidth = 496;
+		const auto &workSize = ImGui::GetMainViewport()->WorkSize;
+		const auto &padding = ImGui::GetStyle().WindowPadding;
 		const auto initialPos = ImVec2(
-			ImGui::GetMainViewport()->WorkSize.x - 512, ImGui::GetMainViewport()->WorkPos.y + 8
+			workSize.x-initialWindowWidth - padding.x, ImGui::GetMainViewport()->WorkPos.y + padding.y
 		);
 
 		// Start the loader widget
 		ImGui::SetNextWindowPos({initialPos.x, initialPos.y}, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize({496, 0}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({initialWindowWidth, 220}, ImGuiCond_FirstUseEver);
 		ImGui::Begin("Image Loader");
 
 		// File selection
@@ -141,8 +144,8 @@ public:
 
 
 		// Start the gamma widget
-		ImGui::SetNextWindowPos({initialPos.x, initialPos.y + 392}, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize({ 496, 0 }, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos({initialPos.x, workSize.y - 448 - padding.y}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({initialWindowWidth, 448}, ImGuiCond_FirstUseEver);
 		ImGui::Begin("sRGB & Gamma");
 
 		// Where to apply gamma
