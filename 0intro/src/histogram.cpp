@@ -16,6 +16,7 @@
 #include <imgui.h>
 
 // FCG Framework
+#include <FCG/player.h>
 #include <FCG/Image/image.h>
 
 // Local includes
@@ -34,7 +35,8 @@ namespace {
 
 /// Plot colors, one per color channel.
 constexpr std::array channelColors{
-	ImVec4{1.f, .30f, .30f, 1.f}, ImVec4{.35f, .95f, .35f, 1.f}, ImVec4{.40f, .60f, 1.f, 1.f}
+	ImVec4{1.f, .30f, .30f, 1.f}, ImVec4{.35f, .95f, .35f, 1.f},
+	ImVec4{.40f, .60f, 1.f, 1.f}
 };
 
 /// \brief
@@ -66,16 +68,19 @@ auto binImage (const fcg::Image &image, Histogram &out, Encode &&encode)
 	//## solution
 	return image.withPixels<SDL_PIXELFORMAT_RGBA128_FLOAT>([&] (auto view) {
 		for (auto row : view)
-			for (int x = 0; x < row.size(); ++x) {
+			for (int x = 0; x < row.size(); ++x)
+			{
 				const auto pixel = row.readUnchecked(x);
 				const std::array values{pixel.r, pixel.g, pixel.b};
-				for (int channel = 0; channel < 3; ++channel) {
+				for (int channel=0; channel<3; ++channel)
+				{
 					if (values[channel] > 1.f)
 						++out.clipped;
 					// The value 1 lands one bin past the end, so the index is clamped into the topmost bin.
 					const auto code = std::clamp(encode(values[channel], channel), .0f, 1.f);
-					const auto bin = std::min(std::size_t(code * float(Histogram::binCount)),
-						Histogram::binCount - 1);
+					const auto bin = std::min(
+						std::size_t(code * float(Histogram::binCount)), Histogram::binCount - 1
+					);
 					++out.bins[channel][bin];
 				}
 			}
@@ -117,7 +122,7 @@ void computeDisplayHistogram (const fcg::Image &image, const std::array<float, 3
 ////
 // HistogramView
 
-void HistogramView::draw (const Histogram &input, const Histogram &display)
+void HistogramView::draw (fcg::Player &player, const Histogram &input, const Histogram &display)
 {
 	// An empty histogram means its binning did not run, which is worth saying instead of drawing flat plots.
 	if (!input.samples || !display.samples) {
@@ -141,18 +146,20 @@ void HistogramView::draw (const Histogram &input, const Histogram &display)
 	ImGui::TextUnformatted("Display codes");
 	for (int channel = 0; channel < 3; ++channel) {
 		if (showInput) {
-			plotChannel(input, channel, width);
+			plotChannel(player, input, channel, width);
 			ImGui::SameLine();
 		}
-		plotChannel(display, channel, width);
+		plotChannel(player, display, channel, width);
 	}
 
 	// How much of the image cannot be shown at all, which is the part tone mapping would have to deal with.
-	ImGui::TextDisabled("%.2f%% of the samples lie above the display range and clamp to white.",
-		100.f * float(display.clipped) / float(display.samples));
+	ImGui::TextDisabled(
+		"%.2f%% of the samples lie above the display range and clamp to white.",
+		100.f * float(display.clipped)/float(display.samples)
+	);
 }
 
-void HistogramView::plotChannel (const Histogram &histogram, int channel, float width)
+void HistogramView::plotChannel (fcg::Player &player, const Histogram &histogram, int channel, float width)
 {
 	// All channels share one scale within a column, so their heights stay comparable across plots.
 	const auto &bins = histogram.bins[channel];
@@ -165,8 +172,9 @@ void HistogramView::plotChannel (const Histogram &histogram, int channel, float 
 	ImGui::PushID(&histogram);
 	ImGui::PushID(channel);
 	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, channelColors[channel]);
-	ImGui::PlotHistogram("##bins", plot.data(), int(plot.size()), 0, nullptr, .0f, 1.f,
-		ImVec2(width, 64.f));
+	ImGui::PlotHistogram(
+		"##bins", plot.data(), int(plot.size()), 0, nullptr, .0f,
+		1.f, ImVec2(width, player.toGuiUnits(64.f)));
 	ImGui::PopStyleColor();
 	ImGui::PopID();
 	ImGui::PopID();

@@ -115,7 +115,7 @@ public:
 
 	void gui (fcg::Device &device, fcg::Player &player) override
 	{
-		constexpr float initialWindowWidth = 496;
+		static const float initialWindowWidth = player.toGuiUnits(496.f);
 		const auto &workSize = ImGui::GetMainViewport()->WorkSize;
 		const auto &padding = ImGui::GetStyle().WindowPadding;
 		const auto initialPos = ImVec2(
@@ -124,7 +124,7 @@ public:
 
 		// Start the loader widget
 		ImGui::SetNextWindowPos({initialPos.x, initialPos.y}, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize({initialWindowWidth, 220}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({initialWindowWidth, player.toGuiUnits(220.f)}, ImGuiCond_FirstUseEver);
 		ImGui::Begin("Image Loader");
 
 		// File selection
@@ -144,8 +144,11 @@ public:
 
 
 		// Start the gamma widget
-		ImGui::SetNextWindowPos({initialPos.x, workSize.y - 448 - padding.y}, ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize({initialWindowWidth, 448}, ImGuiCond_FirstUseEver);
+		static const float initialGammaWndHeight = player.toGuiUnits(448.f);
+		ImGui::SetNextWindowPos(
+			{initialPos.x, workSize.y - initialGammaWndHeight - padding.y}, ImGuiCond_FirstUseEver
+		);
+		ImGui::SetNextWindowSize({initialWindowWidth, initialGammaWndHeight}, ImGuiCond_FirstUseEver);
 		ImGui::Begin("sRGB & Gamma");
 
 		// Where to apply gamma
@@ -197,7 +200,7 @@ public:
 
 		// What the sliders above do to the distribution of the display codes
 		ImGui::SeparatorText("Histogram");
-		histogramView.draw(inputHistogram, displayHistogram);
+		histogramView.draw(player, inputHistogram, displayHistogram);
 
 		// Finalize the gamma widget
 		ImGui::End();

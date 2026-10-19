@@ -19,6 +19,7 @@
 #include <imgui.h>
 
 // FCG Framework
+#include <FCG/player.h>
 #include <FCG/Image/image.h>
 
 // Local includes
@@ -37,7 +38,8 @@ namespace {
 
 /// Plot colors, one per color channel.
 constexpr std::array channelColors{
-	ImVec4{1.f, .30f, .30f, 1.f}, ImVec4{.35f, .95f, .35f, 1.f}, ImVec4{.40f, .60f, 1.f, 1.f}
+	ImVec4{1.f, .30f, .30f, 1.f}, ImVec4{.35f, .95f, .35f, 1.f},
+	ImVec4{.40f, .60f, 1.f, 1.f}
 };
 
 /// \brief
@@ -102,7 +104,7 @@ void computeDisplayHistogram (const fcg::Image &image, const std::array<float, 3
 ////
 // HistogramView
 
-void HistogramView::draw (const Histogram &input, const Histogram &display)
+void HistogramView::draw (fcg::Player &player, const Histogram &input, const Histogram &display)
 {
 	// An empty histogram means its binning did not run, which is worth saying instead of drawing flat plots.
 	if (!input.samples || !display.samples) {
@@ -126,18 +128,20 @@ void HistogramView::draw (const Histogram &input, const Histogram &display)
 	ImGui::TextUnformatted("Display codes");
 	for (int channel = 0; channel < 3; ++channel) {
 		if (showInput) {
-			plotChannel(input, channel, width);
+			plotChannel(player, input, channel, width);
 			ImGui::SameLine();
 		}
-		plotChannel(display, channel, width);
+		plotChannel(player, display, channel, width);
 	}
 
 	// How much of the image cannot be shown at all, which is the part tone mapping would have to deal with.
-	ImGui::TextDisabled("%.2f%% of the samples lie above the display range and clamp to white.",
-		100.f * float(display.clipped) / float(display.samples));
+	ImGui::TextDisabled(
+		"%.2f%% of the samples lie above the display range and clamp to white.",
+		100.f * float(display.clipped)/float(display.samples)
+	);
 }
 
-void HistogramView::plotChannel (const Histogram &histogram, int channel, float width)
+void HistogramView::plotChannel (fcg::Player &player, const Histogram &histogram, int channel, float width)
 {
 	// All channels share one scale within a column, so their heights stay comparable across plots.
 	const auto &bins = histogram.bins[channel];
@@ -150,8 +154,9 @@ void HistogramView::plotChannel (const Histogram &histogram, int channel, float 
 	ImGui::PushID(&histogram);
 	ImGui::PushID(channel);
 	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, channelColors[channel]);
-	ImGui::PlotHistogram("##bins", plot.data(), int(plot.size()), 0, nullptr, .0f, 1.f,
-		ImVec2(width, 64.f));
+	ImGui::PlotHistogram(
+		"##bins", plot.data(), int(plot.size()), 0, nullptr, .0f,
+		1.f, ImVec2(width, player.toGuiUnits(64.f)));
 	ImGui::PopStyleColor();
 	ImGui::PopID();
 	ImGui::PopID();

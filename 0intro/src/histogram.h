@@ -1,6 +1,5 @@
 
 #ifndef __0INTRO_HISTOGRAM_H__
-
 #define __0INTRO_HISTOGRAM_H__
 
 
@@ -15,6 +14,18 @@
 
 // FCG Framework
 #include <FCG/Image/image.h>
+
+
+
+//////
+//
+// Forward declarations
+//
+
+// Framework types
+namespace fcg {
+	class Player;
+}
 
 
 
@@ -73,11 +84,13 @@ public:
 	/// Shows the channels as separate plots because their distributions differ, and reports how much of the image
 	/// lies above the display range at all. Draws a placeholder instead when the given distributions are empty.
 	///
+	/// \param player
+	/// 	The player driving the GUI.
 	/// \param input
 	/// 	Linear light distribution, which only changes when a new image is loaded.
 	/// \param display
 	/// 	Display code distribution, which follows the gamma that is currently effective.
-	void draw (const Histogram &input, const Histogram &display);
+	void draw (fcg::Player &player, const Histogram &input, const Histogram &display);
 
 
 private:
@@ -88,13 +101,15 @@ private:
 	/// \brief
 	/// 	Draws one channel of one histogram.
 	///
+	/// \param player
+	/// 	The player driving the GUI.
 	/// \param histogram
 	/// 	Distribution to draw.
 	/// \param channel
 	/// 	Channel to draw, 0 to 2 for red, green and blue.
 	/// \param width
 	/// 	Width of the plot in pixels.
-	void plotChannel (const Histogram &histogram, int channel, float width);
+	void plotChannel (fcg::Player &player, const Histogram &histogram, int channel, float width);
 
 
 	////
