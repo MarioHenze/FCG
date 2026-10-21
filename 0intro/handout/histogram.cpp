@@ -24,7 +24,7 @@
 
 // Local includes
 #include "histogram.h"
-#include "srgb.h"
+#include "gamma.h"
 
 
 
@@ -88,15 +88,14 @@ void computeHistogram (const fcg::Image &image, Histogram &out)
 		throw std::runtime_error(counted.error().message);
 }
 
-void computeDisplayHistogram (const fcg::Image &image, const std::array<float, 3> &gamma, Histogram &out)
+void computeDisplayHistogram (const fcg::Image &image, const glm::vec3 &gamma, Histogram &out)
 {
 	out = Histogram{};
 	out.samples = std::size_t(image.width()) * std::size_t(image.height()) * 3;
-	// Gamma describes the power segment of the piecewise sRGB curve, so the exponent is its reciprocal.
-	const std::array exponents{1.f / gamma[0], 1.f / gamma[1], 1.f / gamma[2]};
+	const auto exponents = 1.f / gamma;
 	if (const auto counted = binImage(image, out, [&exponents] (float value, int channel) {
-	    	return encodeSRGB(value, exponents[channel]);
-	    }); !counted)
+		return encodeGamma(value, exponents[channel]);
+	}); !counted)
 		throw std::runtime_error(counted.error().message);
 }
 

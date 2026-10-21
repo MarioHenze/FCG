@@ -12,6 +12,9 @@
 #include <array>
 #include <cstddef>
 
+// GLM library
+#include <glm/vec3.hpp>
+
 // FCG Framework
 #include <FCG/Image/image.h>
 
@@ -159,13 +162,13 @@ void computeHistogram (const fcg::Image &image, Histogram &out);
 /// \param image
 /// 	Image to count; see \ref computeHistogram for the required representation.
 /// \param gamma
-/// 	The power segment's gamma per channel, i.e. 2.4 for the standard sRGB curve.
+/// 	The reciprocal power curve's gamma per channel, defaulting to 2.2.
 /// \param out
 /// 	Receives the distribution; previous content is replaced.
 ///
 /// \throws std::runtime_error
 /// 	If the image cannot be accessed; see \ref computeHistogram.
-void computeDisplayHistogram (const fcg::Image &image, const std::array<float, 3> &gamma, Histogram &out);
+void computeDisplayHistogram (const fcg::Image &image, const glm::vec3 &gamma, Histogram &out);
 
 
 #endif // ifndef __0INTRO_HISTOGRAM_H__

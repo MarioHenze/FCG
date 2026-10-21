@@ -6,7 +6,7 @@ set(EXERCISE_SOURCES
 	histogram.cpp
 	image_metadata.cpp
 	main.cpp
-	srgb.cpp
+	gamma.cpp
 )
 
 # A source comes from the generated tree when the generator elided something in it, and from the solution tree

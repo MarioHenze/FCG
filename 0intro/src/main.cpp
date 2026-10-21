@@ -42,7 +42,7 @@
 // Local includes
 #include "histogram.h"
 #include "image_metadata.h"
-#include "srgb.h"
+#include "gamma.h"
 
 // Baked assets
 #include "0intro_assets.h"
@@ -107,6 +107,9 @@ public:
 
 		// Load initial placeholder image
 		loadPlaceholder(device);
+
+		// Select our plain gamma presenter instead of the player's default sRGB conversion.
+		updatePresentation(device, player);
 	}
 
 	void onViewportResize (fcg::Device &device, const glm::uvec2 &oldViewportSize, fcg::Player &player) override {
@@ -149,21 +152,17 @@ public:
 			{initialPos.x, workSize.y - initialGammaWndHeight - padding.y}, ImGuiCond_FirstUseEver
 		);
 		ImGui::SetNextWindowSize({initialWindowWidth, initialGammaWndHeight}, ImGuiCond_FirstUseEver);
-		ImGui::Begin("sRGB & Gamma");
+		ImGui::Begin("Gamma Correction");
 
 		// Where to apply gamma
-		if (ImGui::Checkbox("Use built-in sRGB conversion", &useBuiltinSRGB)) {
+		if (ImGui::Checkbox("Use built-in gamma correction", &useBuiltinGamma))
 			updatePresentation(device, player);
-			// The built-in conversion always uses the standard sRGB exponent, so the display distribution
-			// follows this checkbox and not only the sliders.
-			updateHistograms();
-		}
 		ImGui::SetItemTooltip(
-			"NOTE: Since built-in performs sRGB conversion after texture filtering, the result\nwill slightly"
+			"NOTE: Since built-in performs gamma correction after texture filtering, the result\nwill slightly"
 			" differ from the CPU computation, which happens before texture filtering."
 		);
 
-		// CPU gamma controls apply only to the custom presentation
+		// Gamma controls apply to both the CPU and built-in presentation.
 		// - customized slider helper
 		constexpr auto sliderGamma = [](const char *label, float &gamma) -> bool {
 			float input = gamma;
@@ -174,29 +173,27 @@ public:
 			return true;
 		};
 		// - define the gamma GUI
-		ImGui::BeginDisabled(useBuiltinSRGB); {
-			const bool allChanged = sliderGamma("Gamma (all)", allGamma);
-			bool gammaChanged = false;
-			// Activation also reapplies the remembered shared value after individual edits.
-			if (allChanged || ImGui::IsItemActivated()) {
-				const std::array gammas{allGamma, allGamma, allGamma};
-				if (channelGamma != gammas) {
-					channelGamma = gammas;
-					gammaChanged = true;
-				}
+		const bool allChanged = sliderGamma("Gamma (all)", allGamma);
+		bool gammaChanged = false;
+		// Activation also reapplies the remembered shared value after individual edits.
+		if (allChanged || ImGui::IsItemActivated()) {
+			const auto gammas = glm::vec3(allGamma);
+			if (gammaUniforms.gamma != gammas) {
+				gammaUniforms.gamma = gammas;
+				gammaChanged = true;
 			}
-			constexpr std::array labels{"Gamma R", "Gamma G", "Gamma B"};
-			for (std::size_t channel = 0; channel < channelGamma.size(); ++channel)
-				if (sliderGamma(labels[channel], channelGamma[channel]))
-					gammaChanged = true;
-			ImGui::TextWrapped("Ctrl+click a gamma slider to type a value.");
+		}
+		constexpr std::array labels{"Gamma R", "Gamma G", "Gamma B"};
+		for (int channel = 0; channel < gammaUniforms.gamma.length(); ++channel)
+			if (sliderGamma(labels[channel], gammaUniforms.gamma[channel]))
+				gammaChanged = true;
+		ImGui::TextWrapped("Ctrl+click a gamma slider to type a value.");
 
-			// Perform update right here
-			if (gammaChanged) {
-				updateGammaCorrection(device);
-				updateHistograms();
-			}
-		} ImGui::EndDisabled();
+		// Keep the CPU image ready for mode switches; the GPU recorder reads the current uniforms directly.
+		if (gammaChanged) {
+			updateGammaCorrection(device);
+			updateHistograms();
+		}
 
 		// What the sliders above do to the distribution of the display codes
 		ImGui::SeparatorText("Histogram");
@@ -216,7 +213,7 @@ public:
 	) override
 	{
 		fcg::DrawOptions options;
-		const auto &displayTexture = useBuiltinSRGB ? texture : correctedTexture;
+		const auto &displayTexture = useBuiltinGamma ? texture : correctedTexture;
 		options.texture = fcg::PrimitiveTexture{displayTexture->handle(), sampler->handle()};
 		if (auto drawn = qr->draw(*attributes, rs, commandBuffer, renderPass, options); !drawn)
 			throw std::runtime_error(drawn.error().message);
@@ -228,12 +225,29 @@ protected:
 	////
 	// Methods
 
-	/// \brief Setup built-in sRGB presentation or custom passthrough override depending on what we selected in the GUI
+	/// \brief Select built-in gamma correction or passthrough presentation for the CPU-corrected image.
 	void updatePresentation (fcg::Device &device, fcg::Player &player) const
 	{
-		// If enabled, remove our linear override
-		if (useBuiltinSRGB) {
-			player.clearPresentationRecorder();
+		if (useBuiltinGamma)
+		{
+			auto gammaPresenter = fcg::FullscreenPass::gammaCorrection(device, player.swapchainFormat());
+			if (!gammaPresenter)
+				throw std::runtime_error(std::format(
+					"HDRViewerApplet: failed to create gamma correction presentation pass: {}",
+					gammaPresenter.error().message
+				));
+
+			// The recorder is cleared before applet destruction, so it can read our current uniforms each frame.
+			player.setPresentationRecorder(
+				[this, gammaPresenter = std::move(*gammaPresenter)] (const fcg::PresentationContext &context)
+					-> std::expected<void, fcg::FullscreenError>
+				{
+					const fcg::FullscreenTextureBinding binding{&context.scene, &context.sceneSampler};
+					const std::span<const std::byte> uniforms[]{std::as_bytes(std::span(&gammaUniforms, 1))};
+					const fcg::FullscreenBindings bindings{.samplers = {&binding, 1}, .uniforms = uniforms};
+					return gammaPresenter.record(context.cmdBuffer, context.target, bindings);
+				}
+			);
 			return;
 		}
 
@@ -247,8 +261,7 @@ protected:
 				passthroughPresenter.error().message
 			));
 
-		// Instruct the player to use our no-op presentation pass (it will now ne owned by the Lambda and live as long
-		// as the player keeps our Lambda around – that is, until we tell it to reset presentation)
+		// The player owns the no-op presentation pass through the recorder until it is replaced or cleared.
 		player.setPresentationRecorder(
 			[passthroughPresenter = std::move(*passthroughPresenter)] (const fcg::PresentationContext &context)
 				-> std::expected<void, fcg::FullscreenError>
@@ -367,8 +380,7 @@ protected:
 	/// 	Recomputes the histograms that the GUI panel draws.
 	///
 	/// The input distribution only depends on the light values of the image, so it is refreshed when a new image
-	/// is loaded, while the display distribution always follows the gamma that is currently effective. While the
-	/// built-in sRGB conversion is selected, that gamma is the standard 2.4 exponent, whatever the sliders hold.
+	/// is loaded, while the display distribution follows the same per-channel gamma in both presentation modes.
 	///
 	/// A computation that fails is logged and leaves an empty histogram behind: the panel is a diagnostic, so it
 	/// must not keep the viewer from running.
@@ -383,8 +395,7 @@ protected:
 		try {
 			if (inputChanged)
 				computeHistogram(*linearImage, inputHistogram);
-			const auto effective = useBuiltinSRGB ? std::array{2.4f, 2.4f, 2.4f} : channelGamma;
-			computeDisplayHistogram(*linearImage, effective, displayHistogram);
+			computeDisplayHistogram(*linearImage, gammaUniforms.gamma, displayHistogram);
 		}
 		catch (const std::exception &problem) {
 			inputHistogram = Histogram{};
@@ -395,7 +406,7 @@ protected:
 		}
 	}
 
-	/// \brief Apply the piecewise sRGB curve per channel from the unchanged linear source and upload the result.
+	/// \brief Apply the reciprocal-gamma power curve per channel from the unchanged linear source and upload it.
 	void updateGammaCorrection (fcg::Device &device)
 	{
 		// Convert once per image, preserving float precision and HDR range without tone mapping.
@@ -428,17 +439,15 @@ protected:
 				));
 		}
 
-		// Gamma describes the power segment of the piece-wise curve. The actual sRGB encoding uses its reciprocal. All
-		// channels at 2.4 will match built-in sRGB (minus texture filtering, which in our case will filter the
-		// gamma-corrected values and thus cause differences at visual edges in the image).
-		const std::array exponents{1.f/channelGamma[0], 1.f/channelGamma[1], 1.f/channelGamma[2]};
+		// Use the same reciprocal-gamma curve as the built-in pass, here before texture filtering.
+		const auto exponents = 1.f / gammaUniforms.gamma;
 		auto corrected = linearImage->transformPixelsTo<SDL_PIXELFORMAT_RGBA128_FLOAT>(
 			*correctedImage, [exponents](int x, int y, auto sourcePxl) {
 				auto outPxl = sourcePxl.readUnchecked(x, y);
-				outPxl.r = encodeSRGB(outPxl.r, exponents[0]);
-				outPxl.g = encodeSRGB(outPxl.g, exponents[1]);
-				outPxl.b = encodeSRGB(outPxl.b, exponents[2]);
-				return outPxl; // <- alpha represents coverage (unrelated to light intensity), so it no gamma correction
+				outPxl.r = encodeGamma(outPxl.r, exponents.r);
+				outPxl.g = encodeGamma(outPxl.g, exponents.g);
+				outPxl.b = encodeGamma(outPxl.b, exponents.b);
+				return outPxl; // Alpha represents coverage rather than light intensity, so leave it unchanged.
 			}
 		);
 		if (!corrected)
@@ -460,14 +469,14 @@ protected:
 	////
 	// Fields
 
-	/// Whether to use the built-in linear RGB to sRGB conversion for visually checking your custom conversion
-	bool useBuiltinSRGB = true;
+	/// Whether to use built-in gamma correction for visually checking the CPU correction.
+	bool useBuiltinGamma = true;
 
-	/// Independent power-segment gammas; 2.4 reproduces the built-in sRGB curve for each component.
-	std::array<float, 3> channelGamma{2.4f, 2.4f, 2.4f};
+	/// Parameters shared by CPU correction, display histograms and our GPU presenter; defaults to gamma 2.2.
+	fcg::GammaUniforms gammaUniforms{};
 
 	/// Last shared slider value; reapplied to all channels only when that slider is used.
-	float allGamma = 2.4f;
+	float allGamma = gammaUniforms.gamma.r;
 
 	/// The filepath of the currently loaded image
 	std::filesystem::path imageFilepath;

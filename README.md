@@ -11,10 +11,10 @@ Each exercise lives in its own numbered folder and builds into two executables:
   there, which is deliberate.
 
 The first exercise is a viewer for low- and high-dynamic-range images. It decodes an image, uploads it, and applies
-gamma correction on the CPU, or lets the GPU do the sRGB conversion instead. Its histogram panel is the part left
-for you: `binImage` in `0intro/handout/histogram.cpp` has to walk the image's pixels and count how often each code
-value occurs per channel. The panel works before you start, and says so: until your implementation runs, it reports
-that the histogram is unavailable, and the viewer keeps working.
+reciprocal-gamma correction on the CPU or GPU, with gamma 2.2 by default and adjustable per-channel controls in both
+modes. Its histogram panel is the part left for you: `binImage` in `0intro/handout/histogram.cpp` has to walk the
+image's pixels and count how often each code value occurs per channel. The panel works before you start, and says
+so: until your implementation runs, it reports that the histogram is unavailable, and the viewer keeps working.
 
 Build and run one of the two, for example with the `debug` preset:
 
