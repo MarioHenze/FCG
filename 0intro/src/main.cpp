@@ -82,15 +82,6 @@ public:
 		// Set black clear color
 		player.clearColor() = {0, 0, 0, 1};
 
-		// Init our quad renderer
-		if (auto maybeQr
-		    = fcg::QuadRenderer::create(player, {.alphaBlending=true}); maybeQr)
-			qr = std::move(*maybeQr);
-		else
-			throw std::runtime_error(std::format(
-				"Image Viewer: failed to create quad renderer: {}", maybeQr.error().message
-			));
-
 		// Init attribute storage for use with quad renderer
 		attributes.emplace(/* fcg::PrimitiveAttributes::<ctor>: */device);
 
@@ -110,6 +101,21 @@ public:
 
 		// Select our plain gamma presenter instead of the player's default sRGB conversion.
 		updatePresentation(device, player);
+	}
+
+	void recreatePipelines (fcg::Device &device, fcg::Player &player) override
+	{
+		// Blanket-delete our current quad renderer. If recreation fails it will anyhow be unusable.
+		qr.reset();
+
+		// Init our quad renderer
+		if (auto maybeQr
+			= fcg::QuadRenderer::create(player, {.alphaBlending=true}); maybeQr)
+			qr = std::move(*maybeQr);
+		else
+			throw std::runtime_error(std::format(
+				"Image Viewer: failed to create quad renderer: {}", maybeQr.error().message
+			));
 	}
 
 	void onViewportResize (fcg::Device &device, const glm::uvec2 &oldViewportSize, fcg::Player &player) override {
@@ -526,6 +532,7 @@ protected:
 auto main () -> int {
 	// Run with 2D camera and our image viewer applet
 	return fcg::run<fcg::applet::Camera2D, HDRViewerApplet>(fcg::PlayerSettings {
-		.mainWindowTitle="FCG Intro Exercise - HDR and color spaces"
+		.mainWindowTitle = "FCG Intro Exercise - HDR and color spaces",
+		.sceneRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT // <- make sure we can do proper HDR
 	});
 }

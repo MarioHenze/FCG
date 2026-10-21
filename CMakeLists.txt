@@ -22,7 +22,7 @@ include(cmake/CPM.cmake)
 CPMFindPackage(
 	NAME              FCG-Framework
 	GITHUB_REPOSITORY brussig-tud/FCG-Framework
-	GIT_TAG           4fe87c5030f3af50edb22919f1e7f894632f2667
+	GIT_TAG           621966718dfabea90c2be1c1be074ada5d46c82a
 	OPTIONS
 		"BUILD_SHARED_LIBS OFF" # <- makes it easier to redistribute executables
 		"FCG_BUILD_APPS    OFF" # <- we don't need the example apps
