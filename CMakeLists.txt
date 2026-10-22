@@ -22,11 +22,12 @@ include(cmake/CPM.cmake)
 CPMFindPackage(
 	NAME              FCG-Framework
 	GITHUB_REPOSITORY brussig-tud/FCG-Framework
-	GIT_TAG           621966718dfabea90c2be1c1be074ada5d46c82a
+	GIT_TAG           eeb471b18e7b5614fa6c0c60fa08eded73f7f2bd
 	OPTIONS
 		"BUILD_SHARED_LIBS OFF" # <- makes it easier to redistribute executables
 		"FCG_BUILD_APPS    OFF" # <- we don't need the example apps
 		"FCG_BUILD_TESTS   OFF" # <- we don't need test executables
+		"FCG_IMAGE_OPENEXR ON"  # <- enable EXR image loading through OpenEXR
 		"SDLIMAGE_AVIF     ON"  # <- enable AVIF decoding in the SDL_image backend
 		"SDLIMAGE_STRICT   ON"  # <- fail configuration if our selected decoders can not be enabled
 )

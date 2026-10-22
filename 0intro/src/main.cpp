@@ -283,7 +283,7 @@ protected:
 	void loadImage (fcg::Device &device, const std::filesystem::path &filepath)
 	{
 		// Load from file
-		if (auto maybeImage = fcg::ImageLoader::global().load(filepath); maybeImage) {
+		if (auto maybeImage = fcg::ImageLoader::global().loadAndGuess(filepath); maybeImage) {
 			image = std::move(*maybeImage);
 			imageFilepath = filepath;
 		}
