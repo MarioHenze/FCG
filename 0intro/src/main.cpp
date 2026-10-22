@@ -36,12 +36,12 @@
 #include <FCG/Image/image.h>
 #include <FCG/Image/image_loader.h>
 #include <FCG/Render/quad_renderer.h>
+#include <FCG/Extras/gui.h>
 #include <FCG/Extras/file_dialog.h>
 #include <FCG/Extras/file_filters.h>
 
 // Local includes
 #include "histogram.h"
-#include "image_metadata.h"
 #include "gamma.h"
 
 // Baked assets
@@ -146,7 +146,7 @@ public:
 			openImage(player);
 
 		// Image metadata
-		displayImageMetadata(*image);
+		fcg::extra::displayImageMetadata(*image);
 
 		// Finalize the loader widget
 		ImGui::End();

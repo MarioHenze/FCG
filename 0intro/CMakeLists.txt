@@ -3,10 +3,11 @@
 # the solution, and "0intro_solution" is that solution itself. Building both keeps the scaffold honest, because
 # a scaffold that elides too much stops compiling.
 set(EXERCISE_SOURCES
-	histogram.cpp
-	image_metadata.cpp
-	main.cpp
+	gamma.h
 	gamma.cpp
+	histogram.h
+	histogram.cpp
+	main.cpp
 )
 
 # A source comes from the generated tree when the generator elided something in it, and from the solution tree
