@@ -267,9 +267,9 @@ protected:
 				passthroughPresenter.error().message
 			));
 
-		// The player owns the no-op presentation pass through the recorder until it is replaced or cleared.
+		// The player will now own our no-op presentation pass through the recorder until it is replaced or cleared.
 		player.setPresentationRecorder(
-			[passthroughPresenter = std::move(*passthroughPresenter)] (const fcg::PresentationContext &context)
+			[passthroughPresenter=std::move(*passthroughPresenter)] (const fcg::PresentationContext &context)
 				-> std::expected<void, fcg::FullscreenError>
 			{
 				const fcg::FullscreenTextureBinding binding{&context.scene, &context.sceneSampler};
@@ -345,7 +345,7 @@ protected:
 			loadImage(player.device(), selected.paths.front());
 	}
 
-	/// \brief Upload the unchanged original image and invalidate its correction caches.
+	/// \brief Upload the unchanged original image and refresh CPU gamma correction
 	void onNewImage (fcg::Device &device)
 	{
 		// Invalidate the CPU surfaces (updateGammaCorrection() lazily re-creates them with correct parameters)
@@ -382,17 +382,15 @@ protected:
 			throw std::runtime_error(updated.error().message);
 	}
 
-	/// \brief
-	/// 	Recomputes the histograms that the GUI panel draws.
+	/// \brief Recompute the histograms that the GUI panel draws.
 	///
-	/// The input distribution only depends on the light values of the image, so it is refreshed when a new image
-	/// is loaded, while the display distribution follows the same per-channel gamma in both presentation modes.
+	/// The input distribution only depends on the light values of the image, so it is refreshed when a new image is
+	/// loaded, while the display distribution follows the same per-channel gamma in both presentation modes.
 	///
-	/// A computation that fails is logged and leaves an empty histogram behind: the panel is a diagnostic, so it
-	/// must not keep the viewer from running.
+	/// A computation that fails is logged and leaves an empty histogram behind: the panel is a diagnostic, so it must
+	/// not keep the viewer from running.
 	///
-	/// \param inputChanged
-	/// 	Whether a different image was loaded since the previous call.
+	/// \param inputChanged Whether a different image was loaded since the previous call.
 	void updateHistograms (bool inputChanged = false)
 	{
 		if (!linearImage)
