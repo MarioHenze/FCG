@@ -331,7 +331,7 @@ protected:
 		onNewImage(device);
 	}
 
-	/// \brief Open one file with a fresh snapshot of the singleton registry's format metadata.
+	/// \brief Handle user image file selection
 	void openImage (fcg::Player &player)
 	{
 		// Open the file dialog
