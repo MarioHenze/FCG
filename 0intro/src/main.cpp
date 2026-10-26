@@ -161,8 +161,10 @@ public:
 		ImGui::Begin("Gamma Correction");
 
 		// Where to apply gamma
-		if (ImGui::Checkbox("Use built-in gamma correction", &useBuiltinGamma))
+		if (ImGui::Checkbox("Use built-in gamma correction", &useBuiltinGamma)) {
 			updatePresentation(device, player);
+			player.requireSceneRedraw();
+		}
 		ImGui::SetItemTooltip(
 			"NOTE: Since built-in performs gamma correction after texture filtering, the result\nwill slightly"
 			" differ from the CPU computation, which happens before texture filtering."
@@ -199,6 +201,8 @@ public:
 		if (gammaChanged) {
 			updateGammaCorrection(device);
 			updateHistograms();
+			if (!useBuiltinGamma) // <- built-in gamma happens outside scene rendering, so no scene redraw required
+				player.requireSceneRedraw();
 		}
 
 		// What the sliders above do to the distribution of the display codes
@@ -280,7 +284,7 @@ protected:
 	}
 
 	/// \brief Load image from given file.
-	void loadImage (fcg::Device &device, const std::filesystem::path &filepath)
+	void loadImage (fcg::Device &device, const std::filesystem::path &filepath, fcg::Player &player)
 	{
 		// Load from file
 		if (auto maybeImage = fcg::ImageLoader::global().load(filepath); maybeImage) {
@@ -341,8 +345,10 @@ protected:
 		});
 
 		// Try to load the selected image if any
-		if (!selected.paths.empty() && !selected.paths.front().empty())
-			loadImage(player.device(), selected.paths.front());
+		if (!selected.paths.empty() && !selected.paths.front().empty()) {
+			loadImage(player.device(), selected.paths.front(), player);
+			player.requireSceneRedraw();
+		}
 	}
 
 	/// \brief Upload the unchanged original image and refresh CPU gamma correction
