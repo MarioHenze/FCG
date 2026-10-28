@@ -47,3 +47,4 @@ cmake_path(SET EXERCISE_ASSET_ROOT NORMALIZE "${CMAKE_CURRENT_LIST_DIR}/assets")
 
 # Add individual exercise targets
 add_subdirectory(0intro)
+add_subdirectory(1barycentric)

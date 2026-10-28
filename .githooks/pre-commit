@@ -63,3 +63,4 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 regenerate 0intro/src 0intro/handout
+regenerate 1barycentric/src 1barycentric/handout

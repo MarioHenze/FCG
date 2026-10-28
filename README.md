@@ -2,19 +2,27 @@
 
 ## Working on an exercise
 
-Each exercise lives in its own numbered folder and builds into two executables:
+Each exercise `<exercise>` lives in its own numbered folder and builds into two executables:
 
-- **`0intro`** is your program. Implement the parts marked `TODO` in `0intro/handout/`, and leave everything else
-  alone: `0intro/src/` holds the given code, most of which your program compiles as it is.
-- **`0intro_solution`** is the reference implementation, built from `0intro/src/` without the gaps. Run it next to
-  your own to compare, and read `0intro/src/` whenever you are stuck - the pieces you are asked to write are in
-  there, which is deliberate.
+- **`<exercise>`** is your program. Implement the parts marked `TODO` in `<exercise>/handout/`, and leave everything
+  else alone: `<exercise>/src/` holds the given code, most of which your program compiles as it is.
+- **`<exercise>_solution`** is the reference implementation, built from `<exercise>/src/` without the gaps. Run it
+  next to your own to compare, and read `<exercise>/src/` whenever you are stuck - the pieces you are asked to write
+  are in there, which is deliberate.
 
-The first exercise is a viewer for low- and high-dynamic-range images. It decodes an image, uploads it, and applies
-reciprocal-gamma correction on the CPU or GPU, with gamma 2.2 by default and adjustable per-channel controls in both
-modes. Its histogram panel is the part left for you: `binImage` in `0intro/handout/histogram.cpp` has to walk the
-image's pixels and count how often each code value occurs per channel. The panel works before you start, and says
-so: until your implementation runs, it reports that the histogram is unavailable, and the viewer keeps working.
+The exercises are:
+
+- **`0intro`**, a viewer for low- and high-dynamic-range images. It decodes an image, uploads it, and applies
+  reciprocal-gamma correction on the CPU or GPU, with gamma 2.2 by default and adjustable per-channel controls in
+  both modes. Its histogram panel is the part left for you: `binImage` in `0intro/handout/histogram.cpp` has to walk
+  the image's pixels and count how often each code value occurs per channel. The panel works before you start, and
+  says so: until your implementation runs, it reports that the histogram is unavailable, and the viewer keeps
+  working.
+- **`1barycentric`**, a triangle with one color per corner, drawn into a 16 by 16 framebuffer where each cell is one
+  fragment. `barycentricWeights` and `shadeFragment` in `1barycentric/handout/barycentric.cpp` are the parts left for
+  you: compute the barycentric weights of a fragment and blend the three corner colors with them. The window works
+  before you start, and says so: until your implementation runs, it draws an empty framebuffer and reports what is
+  still missing.
 
 Build and run one of the two, for example with the `debug` preset:
 
@@ -27,13 +35,16 @@ cmake --build --preset debug --target 0intro
 Both executables end up in the `bin/` directory of the preset's build tree, with one subdirectory per configuration
 when using the multi-config `ninja` preset (`build-ninja/bin/Debug/0intro`).
 
-The framework's API documentation is hosted at <https://brussig-tud.github.io/FCG-framework/>. For this exercise, the
+The framework's API documentation is hosted at <https://brussig-tud.github.io/FCG-framework/>. For `0intro`, the
 [Image library overview][image] and, in particular, the module on
-[scoped native pixel access][pixels] are the relevant parts; the viewer itself uses the applet, render and extras
-libraries, whose overviews are linked from the same page.
+[scoped native pixel access][pixels] are the relevant parts; for `1barycentric`, the
+[Render library overview][render] and the [Core library overview][core] are. Both exercises use the applet, render
+and extras libraries, whose overviews are linked from the same page.
 
 [image]: https://brussig-tud.github.io/FCG-framework/fcg_image_overview.html
 [pixels]: https://brussig-tud.github.io/FCG-framework/group__fcg__pixel__access.html
+[render]: https://brussig-tud.github.io/FCG-framework/fcg_render_overview.html
+[core]: https://brussig-tud.github.io/FCG-framework/fcg_core_overview.html
 
 
 ## Building
@@ -67,10 +78,11 @@ first configure therefore downloads the framework and its own dependencies, whic
 built standalone. Pass  `-DFCG_INCLUDE_PACKAGING=ON` to opt into framework installation from an embedded build.
 `FCG_INSTALL_CMAKEDIR` overrides the package installation directory when packaging is enabled.
 
-The exercise sources in `0intro/src` are the reference solution and the single source of truth. The student version
-in `0intro/handout` is generated from them by `tools/elide.py`, which replaces each marked region with the prompt the
-students get. Edit `0intro/src`, run `python3 tools/elide.py 0intro/src 0intro/handout`, and commit both trees; CI
-checks that the scaffold is current. Both variants build, as `0intro` and `0intro_solution`.
+The exercise sources in `<exercise>/src` are the reference solution and the single source of truth. The student
+version in `<exercise>/handout` is generated from them by `tools/elide.py`, which replaces each marked region with
+the prompt the students get. Edit `<exercise>/src`, run `python3 tools/elide.py <exercise>/src <exercise>/handout`,
+and commit both trees; CI checks that the scaffold is current. Both variants build, as `<exercise>` and
+`<exercise>_solution`.
 
 Point Git at the hooks in this repository once per clone, and a commit that touches the solution regenerates the
 scaffold by itself:

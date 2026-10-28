@@ -86,11 +86,13 @@ jobs:
           key: sccache-${{ runner.os }}-${{ github.sha }}
           restore-keys: sccache-${{ runner.os }}-
 
-      # The student scaffold in 0intro/handout is generated from the solution in 0intro/src, so a stale copy would
-      # hand out code that no longer matches. Only checked upstream, because students edit the scaffold.
+      # The student scaffold in <exercise>/handout is generated from the solution in <exercise>/src, so a stale copy
+      # would hand out code that no longer matches. Only checked upstream, because students edit the scaffold.
       - name: Student scaffold is up to date
         if: runner.os == 'Linux' && github.repository == 'MarioHenze/FCG'
-        run: python3 tools/elide.py 0intro/src 0intro/handout --check
+        run: |
+          python3 tools/elide.py 0intro/src 0intro/handout --check
+          python3 tools/elide.py 1barycentric/src 1barycentric/handout --check
 
       # The launcher is passed on the command line rather than through the environment so that it applies to this
       # build tree only. MSVC is asked for embedded debug information (/Z7) to avoid its shared-PDB race (C1041)
