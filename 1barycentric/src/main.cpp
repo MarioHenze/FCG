@@ -419,7 +419,7 @@ public:
 			"sampling drawn on top. The gaps between fragments let the field show through.",
 			smoothResolution, smoothResolution, gridWidth, gridHeight
 		);
-		ImGui::SetItemTooltip(displayHint.c_str());
+		ImGui::SetItemTooltip("%s", displayHint.c_str());
 
 		ImGui::SeparatorText("Inspect a fragment");
 		bool moved = false;
