@@ -255,7 +255,7 @@ public:
 		std::array<glm::vec4, fragmentCount> positions;
 		for (int y = 0; y < gridHeight; ++y)
 			for (int x = 0; x < gridWidth; ++x)
-				positions[fragmentIndex(x, y)] = glm::vec4(fragmentCenter(x, y), .0f, 1.f);
+				positions[fragmentIndex(x, y)] = glm::vec4(fragmentCenter(x, y), .125f, 1.f);
 
 		if (auto set = attributes->setAttributes(
 		    	[&] (fcg::PrimitiveAttributes::Update &update)
@@ -269,7 +269,7 @@ public:
 
 		// The framebuffer's own area, drawn first so that it is visible even where no fragment is drawn.
 		backdrop.emplace(device);
-		const std::array backdropPosition{glm::vec4(.0f, .0f, .0f, 1.f)};
+		const std::array backdropPosition{glm::vec4(.0f, .0f, -.125f, 1.f)};
 		if (auto set = backdrop->setAttributes(
 		    	[&] (fcg::PrimitiveAttributes::Update &update)
 		    	{
@@ -327,11 +327,8 @@ public:
 		// Blanket-delete our current quad renderer. If recreation fails it will anyhow be unusable.
 		qr.reset();
 
-		// Init our quad renderer. The fragments do not overlap, but they all lie in the same plane, so depth
-		// testing could only tell them apart by accident - and the marker has to cover one of them.
-		if (auto maybeQr = fcg::QuadRenderer::create(
-		    	player, {.depthTest=false, .depthWrite=false}
-		    ); maybeQr)
+		// Init our quad renderer.
+		if (auto maybeQr = fcg::QuadRenderer::create(player); maybeQr)
 			qr = std::move(*maybeQr);
 		else
 			throw std::runtime_error(std::format(
@@ -562,8 +559,7 @@ protected:
 		}
 
 		if (auto set = attributes->setAttributes(
-		    	[&] (fcg::PrimitiveAttributes::Update &update)
-		    	{
+		    	[&] (fcg::PrimitiveAttributes::Update &update) {
 		    		update.set<fcg::Attribute::Color>(std::span(fragmentColors));
 		    		update.set<fcg::Attribute::Extent>(std::span(fragmentExtents));
 		    	}
@@ -573,8 +569,7 @@ protected:
 			));
 
 		if (auto set = smooth->setAttributes(
-		    	[&] (fcg::PrimitiveAttributes::Update &update)
-		    	{
+		    	[&] (fcg::PrimitiveAttributes::Update &update) {
 		    		update.set<fcg::Attribute::Color>(std::span(smoothColors));
 		    	}
 		    ); !set)
@@ -587,10 +582,9 @@ protected:
 	/// 	Moves the marker onto the fragment the panel reports on.
 	void updateProbeMarker ()
 	{
-		const std::array position{glm::vec4(fragmentCenter(probeX, probeY), .0f, 1.f)};
+		const std::array position{glm::vec4(fragmentCenter(probeX, probeY), .25f, 1.f)};
 		if (auto set = probeMarker->setAttributes(
-		    	[&] (fcg::PrimitiveAttributes::Update &update)
-		    	{
+		    	[&] (fcg::PrimitiveAttributes::Update &update) {
 		    		update.set<fcg::Attribute::Position>(std::span(position));
 		    	}
 		    ); !set)
