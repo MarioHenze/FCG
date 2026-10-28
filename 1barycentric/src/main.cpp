@@ -239,6 +239,10 @@ public:
 
 	void init (fcg::Device &device, fcg::Player &player) override
 	{
+		// The camera's default view height is too short, make it 20 to comfortably fit the 16 units fragment field.
+		auto camera = *player.findCamera("2D Camera");
+		camera->setFovY(fcg::CameraParameters::Intrinsics::OrthoExtend(20));
+
 		// Set a background that is darker than the uncovered fragments, so the framebuffer's outline is visible.
 		player.clearColor() = {0, 0, 0, 1};
 
@@ -689,8 +693,8 @@ protected:
 
 /// Program entry point.
 auto main () -> int {
-	// The camera's default view height is shorter than the framebuffer, which is 16 units tall.
-	auto camera = std::make_unique<fcg::applet::Camera2D>();
-	camera->setViewHeight(20.f);
-	return fcg::run(std::move(camera), std::make_unique<BarycentricApplet>());
+	// Run with 2D camera and our barycentric interpolation applet
+	return fcg::run<fcg::applet::Camera2D, BarycentricApplet>(fcg::PlayerSettings {
+		.mainWindowTitle = "FCG Exercise - Barycentric Interpolation"
+	});
 }
