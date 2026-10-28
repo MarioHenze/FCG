@@ -63,6 +63,9 @@ build*/
 Build*/
 out*/
 
+# GUI layout written by the ImGui-based exercises
+imgui.ini
+
 # IDE artifacts
 .vs
 .vscode

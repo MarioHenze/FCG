@@ -18,11 +18,12 @@ The exercises are:
   the image's pixels and count how often each code value occurs per channel. The panel works before you start, and
   says so: until your implementation runs, it reports that the histogram is unavailable, and the viewer keeps
   working.
-- **`1barycentric`**, a triangle with one color per corner, drawn into a 16 by 16 framebuffer where each cell is one
+- **`1barycentric`**, a triangle with one color per vertex, drawn into a 16 by 16 framebuffer where each cell is one
   fragment. `barycentricWeights` and `shadeFragment` in `1barycentric/handout/barycentric.cpp` are the parts left for
-  you: compute the barycentric weights of a fragment and blend the three corner colors with them. The window works
-  before you start, and says so: until your implementation runs, it draws an empty framebuffer and reports what is
-  still missing.
+  you: compute the barycentric weights of a fragment and blend the three vertex colors with them. Tick one of the
+  three vertex boxes to paint that vertex's weight across the triangle as a grey scale, and switch the display to
+  *Smooth field* to see the same shading as one continuous gradient behind the mosaic. The window works before you
+  start, and says so: until your implementation runs, it draws an empty framebuffer and reports what is missing.
 
 Build and run one of the two, for example with the `debug` preset:
 

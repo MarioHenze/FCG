@@ -24,16 +24,16 @@
 namespace {
 
 /// \brief
-/// 	Signed area of the triangle spanned by three points, positive for a counter-clockwise corner order.
+/// 	Signed area of the triangle spanned by three points, positive for a counter-clockwise vertex order.
 ///
 /// Areas of triangles that share two points are the quantities whose ratios the barycentric weights are.
 ///
 /// \param a
-/// 	First corner.
+/// 	First vertex.
 /// \param b
-/// 	Second corner.
+/// 	Second vertex.
 /// \param c
-/// 	Third corner.
+/// 	Third vertex.
 ///
 /// \return
 /// 	The signed area, in squared scene units.
@@ -66,6 +66,6 @@ auto shadeFragment (const glm::vec2 &point, const Triangle &triangle) -> std::op
 	// TODO: coverage test and color interpolation
 	//  A fragment is part of the triangle exactly when all three of its weights are nonnegative; no separate
 	//  point-in-triangle test is needed.
-	//  Then blend the three corner colors with the very weights that blend the three corner positions.
+	//  Then blend the three vertex colors with the very weights that blend the three vertex positions.
 	throw std::logic_error("TODO: coverage test and color interpolation");
 }
