@@ -240,7 +240,7 @@ public:
 	void init (fcg::Device &device, fcg::Player &player) override
 	{
 		// The camera's default view height is too short, make it 20 to comfortably fit the 16 units fragment field.
-		auto camera = *player.findCamera("2D Camera");
+		auto camera = *player.activeCamera();
 		camera->setFovY(fcg::CameraParameters::Intrinsics::OrthoExtend(20));
 
 		// Set a background that is darker than the uncovered fragments, so the framebuffer's outline is visible.
