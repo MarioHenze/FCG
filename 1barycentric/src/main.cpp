@@ -258,8 +258,7 @@ public:
 				positions[fragmentIndex(x, y)] = glm::vec4(fragmentCenter(x, y), .125f, 1.f);
 
 		if (auto set = attributes->setAttributes(
-		    	[&] (fcg::PrimitiveAttributes::Update &update)
-		    	{
+			[&] (fcg::PrimitiveAttributes::Update &update) {
 		    		update.set<fcg::Attribute::Position>(std::span(positions));
 		    	}
 		    ); !set)
@@ -271,8 +270,7 @@ public:
 		backdrop.emplace(device);
 		const std::array backdropPosition{glm::vec4(.0f, .0f, -.125f, 1.f)};
 		if (auto set = backdrop->setAttributes(
-		    	[&] (fcg::PrimitiveAttributes::Update &update)
-		    	{
+		    	[&] (fcg::PrimitiveAttributes::Update &update) {
 		    		update.set<fcg::Attribute::Position>(std::span(backdropPosition));
 		    		update.set<fcg::Attribute::Extent>(
 		    			glm::vec3(.5f*float(gridWidth), .5f*float(gridHeight), 1.f)
@@ -294,8 +292,7 @@ public:
 				smoothPositions[smoothIndex(x, y)] = glm::vec4(smoothCenter(x, y), .0f, 1.f);
 
 		if (auto set = smooth->setAttributes(
-		    	[&] (fcg::PrimitiveAttributes::Update &update)
-		    	{
+		    	[&] (fcg::PrimitiveAttributes::Update &update) {
 		    		update.set<fcg::Attribute::Position>(std::span(smoothPositions));
 		    		const float half = .5f*smoothOverlap*smoothCellSize;
 		    		update.set<fcg::Attribute::Extent>(glm::vec3(half, half, 1.f));
@@ -308,8 +305,7 @@ public:
 		// The marker is one more quad, drawn on top of the fragments.
 		probeMarker.emplace(device);
 		if (auto set = probeMarker->setAttributes(
-		    	[&] (fcg::PrimitiveAttributes::Update &update)
-		    	{
+		    	[&] (fcg::PrimitiveAttributes::Update &update) {
 		    		update.set<fcg::Attribute::Extent>(glm::vec3(markerHalfSize, markerHalfSize, 1.f));
 		    		update.set<fcg::Attribute::Color>(glm::vec4(1.f, 1.f, 1.f, 1.f));
 		    	}
@@ -318,7 +314,6 @@ public:
 				"Barycentric Interpolation: failed to set the fragment marker: {}", set.error().message
 			));
 		updateProbeMarker();
-
 		updateShading();
 	}
 
@@ -377,7 +372,8 @@ public:
 		);
 
 		ImGui::SeparatorText("Visualization");
-		for (int vertex = 0; vertex < 3; ++vertex) {
+		for (int vertex = 0; vertex < 3; ++vertex)
+		{
 			if (vertex > 0)
 				ImGui::SameLine();
 			ImGui::PushID(vertex);
