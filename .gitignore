@@ -6,6 +6,8 @@
 *.lo
 *.o
 *.obj
+# ...except Wavefront meshes (.obj) in the asset directory
+!/assets/mesh/**/*.obj
 
 # Precompiled Headers
 *.gch
