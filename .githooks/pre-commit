@@ -64,3 +64,4 @@ fi
 
 regenerate 0intro/src 0intro/handout
 regenerate 1barycentric/src 1barycentric/handout
+regenerate 2accelds/src 2accelds/handout

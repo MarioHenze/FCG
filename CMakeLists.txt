@@ -22,7 +22,7 @@ include(cmake/CPM.cmake)
 CPMFindPackage(
 	NAME              FCG-Framework
 	GITHUB_REPOSITORY brussig-tud/FCG-Framework
-	GIT_TAG           a82edbaa75c38573d035057a63842dd9293499fe
+	GIT_TAG           3e4afd7f9e5f3e97ea7a551d7baa431ddd76a871
 	OPTIONS
 		"BUILD_SHARED_LIBS OFF" # <- makes it easier to redistribute executables
 		"FCG_BUILD_APPS    OFF" # <- we don't need the example apps
@@ -48,3 +48,4 @@ cmake_path(SET EXERCISE_ASSET_ROOT NORMALIZE "${CMAKE_CURRENT_LIST_DIR}/assets")
 # Add individual exercise targets
 add_subdirectory(0intro)
 add_subdirectory(1barycentric)
+add_subdirectory(2accelds)

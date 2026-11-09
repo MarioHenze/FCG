@@ -24,8 +24,9 @@ The exercises are:
   three vertex boxes to paint that vertex's weight across the triangle as a grey scale, and switch the display to
   *Smooth field* to see the same shading as one continuous gradient behind the mosaic. The window works before you
   start, and says so: until your implementation runs, it draws an empty framebuffer and reports what is missing.
+- **`2accelds`**, TODO: describe tasks on very high level
 
-Build and run one of the two, for example with the `debug` preset:
+Build and run an exercise, for example with the `debug` preset:
 
 ```sh
 cmake --preset debug
@@ -39,13 +40,15 @@ when using the multi-config `ninja` preset (`build-ninja/bin/Debug/0intro`).
 The framework's API documentation is hosted at <https://brussig-tud.github.io/FCG-framework/>. For `0intro`, the
 [Image library overview][image] and, in particular, the module on
 [scoped native pixel access][pixels] are the relevant parts; for `1barycentric`, the
-[Render library overview][render] and the [Core library overview][core] are. Both exercises use the applet, render
-and extras libraries, whose overviews are linked from the same page.
+[Render library overview][render] and the [Core library overview][core] are. For `2accelds`, consult those two
+overviews together with the [Mesh library overview][mesh]. The applet and extras overviews are also linked from
+the same page.
 
 [image]: https://brussig-tud.github.io/FCG-framework/fcg_image_overview.html
 [pixels]: https://brussig-tud.github.io/FCG-framework/group__fcg__pixel__access.html
 [render]: https://brussig-tud.github.io/FCG-framework/fcg_render_overview.html
 [core]: https://brussig-tud.github.io/FCG-framework/fcg_core_overview.html
+[mesh]: https://brussig-tud.github.io/FCG-framework/fcg_mesh_overview.html
 
 
 ## Building
@@ -73,11 +76,7 @@ first configure therefore downloads the framework and its own dependencies, whic
 > Otherwise, the main window will have no title bar including minimize/maximize/close buttons.
 
 
-## NOTE to maintainers
-
-*FCG-Framework* installation rules default to disabled when embedded (via `FetchContent` or `CPM`), and enabled when
-built standalone. Pass  `-DFCG_INCLUDE_PACKAGING=ON` to opt into framework installation from an embedded build.
-`FCG_INSTALL_CMAKEDIR` overrides the package installation directory when packaging is enabled.
+## Note to maintainers
 
 The exercise sources in `<exercise>/src` are the reference solution and the single source of truth. The student
 version in `<exercise>/handout` is generated from them by `tools/elide.py`, which replaces each marked region with
