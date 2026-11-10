@@ -10,8 +10,10 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <iterator>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -37,7 +39,71 @@
 
 // Local includes
 #include "first_person_camera.h"
+#include "hash_grid.h"
+#include "query_cursor.h"
 #include "triangle_soup.h"
+
+
+
+//////
+//
+// Structs and enums
+//
+
+/// \brief A mesh vertex with its sphere radius, ready for indexing in a HashGrid.
+///
+/// Satisfies the Primitive concept: the position is the vertex position, and voxelize() appends the cells overlapped
+/// by the vertex's sphere, which is the single cell containing the position when the radius is zero.
+struct VertexPrimitive
+{
+	/// World-space vertex position.
+	glm::vec3 position{};
+
+	/// Sphere radius from the mesh's "v:radius" vertex property; zero for a pure point.
+	float radius = 0.f;
+
+	/// The source vertex in its mesh.
+	OpenMesh::VertexHandle handle{};
+
+	/// A default primitive at the origin with zero radius.
+	VertexPrimitive () = default;
+
+	/// \brief Read position and radius from a smart vertex handle's mesh.
+	///
+	/// \param vh The smart vertex handle; must be valid and attached to a fcg::Mesh.
+	explicit VertexPrimitive (const OpenMesh::SmartVertexHandle &vh)
+		: VertexPrimitive(*static_cast<const fcg::Mesh*>(vh.mesh()), vh) {}
+
+	/// \brief Read the vertex position and the "v:radius" property, defaulting the radius to zero when absent.
+	///
+	/// \param mesh The mesh owning the vertex.
+	/// \param vh A valid vertex handle of \p mesh.
+	///
+	/// \throws std::invalid_argument If \p vh is not a valid handle.
+	VertexPrimitive (const fcg::Mesh &mesh, OpenMesh::VertexHandle vh) : handle(vh)
+	{
+		// Reject dangling handles outright
+		if (!vh.is_valid())
+			throw std::invalid_argument("Vertex primitive requires a valid vertex handle");
+
+		// Copy the vertex position
+		const auto &point = mesh.point(vh);
+		position = {point[0], point[1], point[2]};
+
+		// Read the sphere radius when the mesh provides it
+		OpenMesh::VPropHandleT<float> property;
+		if (mesh.get_property_handle(property, "v:radius"))
+			radius = mesh.property(property, vh);
+	}
+
+	/// \brief Append the grid cells overlapped by the vertex sphere.
+	///
+	/// \param cellWidths Grid cell extents; must be positive per axis.
+	/// \param cells Receives the overlapped cells.
+	void voxelize (const glm::vec3 &cellWidths, std::vector<GridCell> &cells) const {
+		voxelizeSphere(position, radius, cellWidths, cells);
+	}
+};
 
 
 
@@ -45,6 +111,213 @@
 //
 // Classes
 //
+
+/// \brief Zero-copy random-access view of a mesh's vertices as smart handles.
+///
+/// Indexes the mesh's original vertex array through Mesh::vertex_handle in constant time, so no vertex data is
+/// duplicated. The mesh must outlive the view and must not be topologically modified while the view is in use.
+class MeshVertexView : public std::ranges::view_interface<MeshVertexView>
+{
+public:
+
+	////
+	// Classes
+
+	/// Random-access iterator yielding the mesh's smart vertex handles by value.
+	class Iterator
+	{
+		////
+		// Friend declarations
+
+		/// MeshVertexView positions new iterators at its range bounds.
+		friend class MeshVertexView;
+
+
+	public:
+
+		////
+		// Types
+
+		/// Random traversal is supported.
+		using iterator_concept = std::random_access_iterator_tag;
+
+		/// Random traversal is supported.
+		using iterator_category = std::random_access_iterator_tag;
+
+		/// Iteration yields smart vertex handles.
+		using value_type = OpenMesh::SmartVertexHandle;
+
+		/// Signed distance between two iterators.
+		using difference_type = std::ptrdiff_t;
+
+
+		////
+		// Object construction
+
+		/// A singular iterator.
+		Iterator () = default;
+
+
+		////
+		// Accessors
+
+		/// The smart handle at the iterator's position.
+		[[nodiscard]] auto operator* () const -> OpenMesh::SmartVertexHandle {
+			return OpenMesh::make_smart(mesh->vertex_handle(static_cast<unsigned int>(index)), *mesh);
+		}
+
+		/// The smart handle at an offset from the iterator's position.
+		[[nodiscard]] auto operator[] (difference_type offset) const -> OpenMesh::SmartVertexHandle {
+			return *(*this + offset);
+		}
+
+
+		////
+		// Methods
+
+		/// Advance to the next vertex.
+		auto operator++ () -> Iterator& {
+			++index;
+			return *this;
+		}
+
+		/// Advance to the next vertex, returning the previous position.
+		auto operator++ (int) -> Iterator {
+			auto previous = *this;
+			++index;
+			return previous;
+		}
+
+		/// Retreat to the previous vertex.
+		auto operator-- () -> Iterator& {
+			--index;
+			return *this;
+		}
+
+		/// Retreat to the previous vertex, returning the previous position.
+		auto operator-- (int) -> Iterator {
+			auto previous = *this;
+			--index;
+			return previous;
+		}
+
+		/// Advance by an offset.
+		auto operator+= (difference_type offset) -> Iterator& {
+			index += offset;
+			return *this;
+		}
+
+		/// Retreat by an offset.
+		auto operator-= (difference_type offset) -> Iterator& {
+			index -= offset;
+			return *this;
+		}
+
+		/// An iterator advanced by an offset.
+		[[nodiscard]] friend auto operator+ (Iterator it, difference_type offset) -> Iterator {
+			return it += offset;
+		}
+
+		/// An iterator advanced by an offset.
+		[[nodiscard]] friend auto operator+ (difference_type offset, Iterator it) -> Iterator {
+			return it += offset;
+		}
+
+		/// An iterator retreated by an offset.
+		[[nodiscard]] friend auto operator- (Iterator it, difference_type offset) -> Iterator {
+			return it -= offset;
+		}
+
+		/// The signed distance between two iterators.
+		[[nodiscard]] friend auto operator- (const Iterator &a, const Iterator &b) -> difference_type {
+			return a.index - b.index;
+		}
+
+		/// Iterators at the same position of the same mesh compare equal.
+		[[nodiscard]] friend auto operator== (const Iterator&, const Iterator&) -> bool = default;
+
+		/// Iterators order by position.
+		[[nodiscard]] friend auto operator<=> (const Iterator&, const Iterator&) = default;
+
+
+	private:
+
+		////
+		// Object construction
+
+		/// An iterator over the given mesh at the given position; only MeshVertexView creates iterators.
+		Iterator (const fcg::Mesh *mesh, difference_type index) noexcept : mesh(mesh), index(index) {}
+
+
+		////
+		// Fields
+
+		/// The mesh supplying the vertices; never owned.
+		const fcg::Mesh *mesh = nullptr;
+
+		/// Current vertex position.
+		difference_type index = 0;
+	};
+
+
+	////
+	// Object construction
+
+	/// An empty view.
+	MeshVertexView () = default;
+
+	/// \brief View all vertices of a mesh in vertex-handle order.
+	///
+	/// \param mesh The mesh to view; it must outlive the view and stay topologically unmodified.
+	explicit MeshVertexView (const fcg::Mesh &mesh) noexcept : mesh(&mesh), count(mesh.n_vertices()) {}
+
+
+	////
+	// Accessors
+
+	/// Iterator to the first vertex.
+	[[nodiscard]] auto begin () const noexcept -> Iterator {
+		return {mesh, 0};
+	}
+
+	/// Past-the-end iterator.
+	[[nodiscard]] auto end () const noexcept -> Iterator {
+		return {mesh, static_cast<Iterator::difference_type>(count)};
+	}
+
+	/// Number of viewed vertices.
+	[[nodiscard]] auto size () const noexcept -> std::size_t {
+		return count;
+	}
+
+	/// \brief Smart handle of the vertex with the given index, in constant time.
+	///
+	/// \param index The vertex index, below size().
+	///
+	/// \return The smart vertex handle.
+	[[nodiscard]] auto operator[] (std::size_t index) const -> OpenMesh::SmartVertexHandle {
+		return begin()[static_cast<Iterator::difference_type>(index)];
+	}
+
+
+private:
+
+	////
+	// Fields
+
+	/// The viewed mesh; never owned.
+	const fcg::Mesh *mesh = nullptr;
+
+	/// Number of viewed vertices.
+	std::size_t count = 0;
+};
+
+// The hash grid indexes vertex primitives straight from the mesh, from smart-handle vectors and from plain vectors
+static_assert(Primitive<VertexPrimitive>);
+static_assert(PrimitiveStore<MeshVertexView, VertexPrimitive>);
+static_assert(PrimitiveStore<std::vector<OpenMesh::SmartVertexHandle>, VertexPrimitive>);
+static_assert(PrimitiveStore<std::vector<VertexPrimitive>, VertexPrimitive>);
+
 
 /// View loaded meshes, and build and query a uniform hash grid over its vertices.
 class UniformHashGridApplet : public fcg::Applet
@@ -72,6 +345,7 @@ public:
 		if (!camera)
 			throw std::runtime_error("This task requires the `FirstPersonCamera` applet as the active camera");
 		player.clearColor() = {.025f, .03f, .045f, 1.f};
+		queryCursor.emplace(device);
 		useTestScene(player);
 		if (!mesh)
 			throw std::runtime_error(error);
@@ -111,6 +385,14 @@ public:
 				meshRenderingError.clear();
 		} else
 			meshRenderingError = newMeshRenderer.error().message;
+
+		// Replace the query cursor's renderers and re-run the active query against them
+		if (queryCursor) {
+			queryCursor->recreatePipelines(player);
+			if (!queryCursor->getError().empty())
+				reportError(queryCursor->getError());
+		}
+		runQuery();
 	}
 
 	/// \brief Keep geometry and the user's camera navigation when the viewport changes.
@@ -131,7 +413,7 @@ public:
 	{
 		// Seed a scaled inspector near the right edge, retaining saved settings
 		const auto *viewport = ImGui::GetMainViewport();
-		const auto size = player.toGuiUnits(ImVec2(380.f, 370.f));
+		const auto size = player.toGuiUnits(ImVec2(380.f, 560.f));
 		const auto padding = ImGui::GetStyle().WindowPadding;
 		ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowPos({viewport->WorkPos.x + viewport->WorkSize.x - size.x - padding.x,
@@ -180,6 +462,12 @@ public:
 				displayPointInfo();
 			else
 				ImGui::TextUnformatted("No mesh loaded");
+
+			// Configure the hash grid and run interactive radius queries
+			if (hashGrid) {
+				ImGui::Separator();
+				displayGridControls(player);
+			}
 			if (!meshRenderingError.empty()) {
 				ImGui::Separator();
 				ImGui::TextWrapped("Mesh rendering unavailable: %s", meshRenderingError.c_str());
@@ -223,6 +511,17 @@ public:
 				options.color = {1.f / 32.f, .25f, 2.f / 3.f, 1.f};
 			options.lighting.enabled = lighting;
 			meshRenderer->draw(*gpuMesh, state, command, pass, options);
+		}
+
+		// Draw the query cursor last so either shape blends over the opaque scene
+		if (queryCursor) {
+			fcg::DrawOptions options;
+			options.lighting.enabled = lighting;
+			queryCursor->render(state, command, pass, options);
+			if (!queryCursor->getError().empty() && error != queryCursor->getError()) {
+				reportError(queryCursor->getError());
+				player.requireSceneRedraw();
+			}
 		}
 	}
 
@@ -277,7 +576,8 @@ private:
 
 	/// Upload one sphere per live vertex, reading its radius from the source mesh property.
 	[[nodiscard]] static auto uploadSpheres (
-		fcg::Device &device, const fcg::Mesh &source, OpenMesh::VPropHandleT<float> radii
+		fcg::Device &device, const fcg::Mesh &source, OpenMesh::VPropHandleT<float> radii,
+		std::vector<glm::vec4> &baseColors
 	) -> std::expected<fcg::PrimitiveAttributes, fcg::RenderError>
 	{
 		std::vector<glm::vec4> positions, colors;
@@ -303,6 +603,7 @@ private:
 		});
 		if (!uploaded)
 			return std::unexpected(std::move(uploaded.error()));
+		baseColors = std::move(colors);
 		return attributes;
 	}
 
@@ -328,7 +629,94 @@ private:
 			row("Bounds maximum", coordinates(metadata.bounds->maximum));
 			row("Bounds extent", coordinates(metadata.bounds->maximum - metadata.bounds->minimum));
 		}
+		if (hashGrid) {
+			std::size_t references = 0;
+			for (const auto &entry : hashGrid->cells())
+				references += entry.second.size();
+			row("Cell widths", std::format("{:.4g}, {:.4g}, {:.4g}", cellWidths.x, cellWidths.y, cellWidths.z));
+			row("Occupied cells", std::format("{}", hashGrid->occupiedCellCount()));
+			row("Cell references", std::format("{}", references));
+		}
 		ImGui::EndTable();
+	}
+
+	/// Display controls for the hash grid's cell widths and the interactive radius query.
+	void displayGridControls (fcg::Player &player)
+	{
+		// Adjusting the cell widths rebuilds the grid in place
+		auto nextWidths = cellWidths;
+		if (ImGui::DragFloat3("Cell widths", &nextWidths.x, .02f * pointRadius, minCellWidth, 0.f, "%.4g")
+			&& nextWidths != cellWidths)
+		{
+			cellWidths = glm::max(nextWidths, glm::vec3{minCellWidth});
+			hashGrid->rebuild(cellWidths);
+			runQuery();
+			player.requireSceneRedraw();
+		}
+
+		// Changing the query configuration re-runs the active query
+		bool queryChanged = false;
+		queryChanged |= ImGui::Checkbox("Radius query", &queryEnabled);
+		ImGui::BeginDisabled(!queryEnabled);
+		queryChanged |= ImGui::Combo("Query shape", &queryShape, "Cuboid\0Sphere\0");
+		queryChanged |= ImGui::DragFloat3("Query center", &queryCenter.x, .02f * pointRadius, 0.f, 0.f, "%.4g");
+		queryChanged |= ImGui::DragFloat("Query radius", &queryRadius, .02f * pointRadius, 0.f, 0.f, "%.4g");
+		ImGui::EndDisabled();
+
+		// Keep both cursor colors editable while the query is disabled
+		constexpr auto colorFlags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_AlphaBar;
+		queryChanged |= ImGui::ColorEdit4("Cuboid", &cuboidCursorColor.x, colorFlags);
+		queryChanged |= ImGui::ColorEdit4("Sphere", &sphereCursorColor.x, colorFlags);
+		if (queryChanged) {
+			cuboidCursorColor = glm::clamp(cuboidCursorColor, 0.f, 1.f);
+			sphereCursorColor = glm::clamp(sphereCursorColor, 0.f, 1.f);
+			runQuery();
+			player.requireSceneRedraw();
+		}
+		if (queryEnabled)
+			ImGui::Text("Matched points: %zu", queryMatches);
+	}
+
+	/// Run the configured radius query, highlight the matched spheres and surface student TODOs without crashing.
+	void runQuery ()
+	{
+		// Nothing to highlight without spheres
+		if (!spheres)
+			return;
+
+		// Recolor the matched spheres, starting from the unhighlighted base colors
+		error.clear();
+		auto colors = sphereBaseColors;
+		const auto &cursorColor = queryShape == 0 ? cuboidCursorColor : sphereCursorColor;
+		const glm::vec4 highlightColor{glm::vec3{cursorColor}, 1.f};
+		queryMatches = 0;
+		if (queryEnabled && hashGrid) {
+			try {
+				const auto indices = queryShape == 0
+					? hashGrid->queryCuboidIndices(queryCenter, glm::vec3{queryRadius})
+					: hashGrid->querySphereIndices(queryCenter, queryRadius);
+				queryMatches = indices.size();
+				for (const auto index : indices)
+					if (index < colors.size())
+						colors[index] = highlightColor;
+			}
+			catch (const std::logic_error &exception) {
+				reportError(exception.what());
+			}
+		}
+
+		// Upload the recolored instances
+		if (auto updated = spheres->setAttributes([&] (fcg::PrimitiveAttributes::Update &update) {
+			update.set<fcg::Attribute::Color>(std::span(colors));
+		}); !updated)
+			reportError(std::format("Cannot highlight query matches: {}", updated.error().message));
+
+		// Track the query volume with the cursor
+		if (queryCursor) {
+			queryCursor->update(queryEnabled, queryShape, queryCenter, queryRadius, cursorColor);
+			if (!queryCursor->getError().empty())
+				reportError(queryCursor->getError());
+		}
 	}
 
 	/// Select the GPU channels for file normals, flat shading or regenerated smooth normals.
@@ -402,11 +790,15 @@ private:
 		const float nextRadius = nextMesh->property(
 			*nextRadii, static_cast<OpenMesh::VertexHandle>(*nextMesh->vertices_sbegin())
 		);
-		auto nextSpheres = uploadSpheres(device, *nextMesh, *nextRadii);
+		std::vector<glm::vec4> nextBaseColors;
+		auto nextSpheres = uploadSpheres(device, *nextMesh, *nextRadii, nextBaseColors);
 		if (!nextSpheres) {
 			reportError(std::format("Cannot prepare spheres: {}", nextSpheres.error().message));
 			return;
 		}
+
+		// Index the staged vertices in a hash grid sized to one sphere diameter
+		HashGrid<VertexPrimitive, MeshVertexView> nextGrid{MeshVertexView{*nextMesh}, glm::vec3{2.f * nextRadius}};
 
 		// A surface failure must not prevent viewing valid sphere primitives
 		std::optional<fcg::GPUMesh> nextSurface;
@@ -444,9 +836,16 @@ private:
 		pointRadius = nextRadius;
 		metadata = std::move(nextMetadata);
 		spheres = std::move(*nextSpheres);
+		hashGrid = std::move(nextGrid);
+		cellWidths = glm::vec3{2.f * nextRadius};
+		sphereBaseColors = std::move(nextBaseColors);
+		queryCenter = metadata.bounds ? glm::vec3{(metadata.bounds->minimum + metadata.bounds->maximum) * .5}
+			: glm::vec3{};
+		queryRadius = 2.f * nextRadius;
 		gpuMesh = std::move(nextSurface);
 		meshRenderingError.swap(nextSurfaceError);
 		error.clear();
+		runQuery();
 		player.requireSceneRedraw();
 	}
 
@@ -536,6 +935,39 @@ private:
 
 	/// Sphere instances uploaded once per successfully loaded mesh.
 	std::optional<fcg::PrimitiveAttributes> spheres;
+
+	/// Uniform hash grid over the current mesh's vertices, powering the interactive radius queries.
+	std::optional<HashGrid<VertexPrimitive, MeshVertexView>> hashGrid;
+
+	/// Visual cursor tracking the active query volume in the 3D scene.
+	std::optional<QueryCursor> queryCursor;
+
+	/// Cell widths the hash grid was built with; adjustable in the GUI, clamped strictly positive.
+	glm::vec3 cellWidths{1.f, 1.f, 1.f};
+
+	/// Per-vertex sphere colors without query highlighting, restored whenever the query changes.
+	std::vector<glm::vec4> sphereBaseColors;
+
+	/// Whether the interactive radius query is active.
+	bool queryEnabled = false;
+
+	/// Query shape: 0 selects the cuboid query, 1 the spherical query.
+	int queryShape = 0;
+
+	/// Cuboid cursor RGBA; its RGB also colors opaque query matches.
+	glm::vec4 cuboidCursorColor{1, 0, 1, 2/3.f};
+
+	/// Spherical cursor RGBA; its RGB also colors opaque query matches.
+	glm::vec4 sphereCursorColor{1, 0, 1, 2/3.f};
+
+	/// Center of the query volume in world coordinates.
+	glm::vec3 queryCenter{};
+
+	/// Query radius in world units; per-axis half-extent for the cuboid, radius for the sphere.
+	float queryRadius = 0.f;
+
+	/// Number of primitives matched by the most recent query.
+	std::size_t queryMatches = 0;
 
 	/// The sphere renderer we use.
 	std::optional<fcg::EllipsoidRenderer> sphereRenderer;

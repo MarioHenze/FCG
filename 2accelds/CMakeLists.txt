@@ -6,6 +6,9 @@ set(EXERCISE_SOURCES
 	camera.cpp
 	first_person_camera.h
 	first_person_camera.cpp
+	hash_grid.h
+	hash_grid.cpp
+	query_cursor.h
 	triangle_soup.h
 	triangle_soup.cpp
 	main.cpp

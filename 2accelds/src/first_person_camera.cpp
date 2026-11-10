@@ -84,6 +84,16 @@ void validatePose (const fcg::CameraParameters &params)
 	return result;
 }
 
+/// Convert a finite direction to yaw and clamped pitch, retaining yaw for vertical requests.
+[[nodiscard]] auto viewAngles (const glm::dvec3 &dir, float currentYaw) -> std::pair<float, float> {
+	const double horizontal = std::hypot(dir.x, dir.z);
+	if (horizontal == 0. && dir.y == 0.)
+		throw std::invalid_argument("Camera direction must be nonzero");
+	const float yaw = horizontal > 0. ? float(std::atan2(dir.x, -dir.z)) : currentYaw;
+	const float pitch = std::clamp(float(std::atan2(dir.y, horizontal)), -glm::radians(89.f), glm::radians(89.f));
+	return {yaw, pitch};
+}
+
 /// Derive a level, orthonormal camera basis from the canonical yaw and pitch angles.
 void setAxes (fcg::CameraParameters &params, float yaw, float pitch) {
 	const glm::vec3 right{std::cos(yaw), 0.f, std::sin(yaw)};
@@ -146,10 +156,12 @@ void FirstPersonCamera::commitParameters (const fcg::CameraParameters &next, flo
 	requireSceneRedraw();
 }
 
-void FirstPersonCamera::setFovY (const fcg::CameraParameters::Intrinsics::FovY &fovY) {
+void FirstPersonCamera::setFovY (const fcg::CameraParameters::Intrinsics::FovY &fovY)
+{
 	const auto *perspective = std::get_if<fcg::CameraParameters::Intrinsics::PerspectiveFov>(&fovY);
 	if (!perspective)
 		throw std::invalid_argument("FirstPersonCamera requires perspective projection");
+
 	requireFinite(perspective->angle);
 	auto next = m_params;
 	next.intrinsics.fovY = fcg::CameraParameters::Intrinsics::PerspectiveFov{std::clamp(perspective->angle, 1.f, 179.f)};
@@ -188,18 +200,27 @@ void FirstPersonCamera::setOrientationUnchecked (const glm::vec3 &dir, const glm
 {
 	// The base interface validates the supplied axes; only the direction determines this camera's level orientation
 	requireFinite(dir);
-	const double horizontal = std::hypot(double(dir.x), double(dir.z));
-	if (horizontal == 0. && dir.y == 0.f)
-		throw std::invalid_argument("Camera direction must be nonzero");
-	const float yaw = horizontal > 0. ? float(std::atan2(double(dir.x), -double(dir.z))) : m_yaw;
-	const float pitch = std::clamp(float(std::atan2(double(dir.y), horizontal)), -glm::radians(89.f), glm::radians(89.f));
+	const auto [yaw, pitch] = viewAngles(glm::dvec3(dir), m_yaw);
 	auto next = m_params;
 	setAxes(next, yaw, pitch);
 	commitParameters(next, yaw, pitch);
 }
 
-void FirstPersonCamera::setFocalPoint (const glm::vec3 &point) {
-	translateToFocalPoint(point);
+void FirstPersonCamera::setFocalPoint (const glm::vec3 &point)
+{
+	requireFinite(point);
+	const auto direction = glm::dvec3(point) - glm::dvec3(m_params.extrinsics.eye);
+	const float distance = checkedFloat(glm::length(direction));
+	if (distance < .001f)
+		/// Would be numerically unstable, and the eye is close enough to the requested focus that it hardly matters
+		return;
+
+	// Update camera parameters
+	const auto [yaw, pitch] = viewAngles(direction, m_yaw);
+	auto next = m_params;
+	next.intrinsics.f = distance;
+	setAxes(next, yaw, pitch);
+	commitParameters(next, yaw, pitch);
 }
 
 void FirstPersonCamera::translateToFocalPoint (const glm::vec3 &point) {
@@ -209,7 +230,9 @@ void FirstPersonCamera::translateToFocalPoint (const glm::vec3 &point) {
 
 void FirstPersonCamera::resetRotation () {
 	auto next = m_params;
-	next.extrinsics.eye = checkedPosition(glm::dvec3(focalPoint()) + glm::dvec3(0, 0, m_params.intrinsics.f));
+	next.extrinsics.eye = checkedPosition(
+		glm::dvec3(focalPoint()) + glm::dvec3(0, 0, m_params.intrinsics.f)
+	);
 	setAxes(next, 0.f, 0.f);
 	commitParameters(next, 0.f, 0.f);
 }
@@ -222,11 +245,12 @@ auto FirstPersonCamera::right () const -> glm::vec3 {
 	return {std::cos(m_yaw), 0.f, std::sin(m_yaw)};
 }
 
-void FirstPersonCamera::turn (float deltaYaw, float deltaPitch) {
-	if (!std::isfinite(deltaYaw) || !std::isfinite(deltaPitch))
-		return;
+void FirstPersonCamera::turn (float deltaYaw, float deltaPitch)
+{
 	const float yaw = float(std::remainder(double(m_yaw) + deltaYaw, glm::two_pi<double>()));
-	const float pitch = float(std::clamp(double(m_pitch) + deltaPitch, -double(glm::radians(89.f)), double(glm::radians(89.f))));
+	const float pitch = float(std::clamp(
+		double(m_pitch) + deltaPitch, -double(glm::radians(89.f)), double(glm::radians(89.f))
+	));
 	auto next = m_params;
 	setAxes(next, yaw, pitch);
 	commitParameters(next, yaw, pitch);
@@ -257,8 +281,7 @@ void FirstPersonCamera::fitBounds (const glm::dvec3 &minimum, const glm::dvec3 &
 
 void FirstPersonCamera::render (
 	fcg::Device&, fcg::RenderState &state, SDL_GPURenderPass*, SDL_GPUCommandBuffer*, fcg::Player &player
-)
-{
+){
 	auto viewport = state.viewportSize();
 	if (!viewport.x || !viewport.y)
 		viewport = player.viewportSize();

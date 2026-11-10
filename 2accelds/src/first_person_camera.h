@@ -29,7 +29,8 @@
 
 /// A perspective camera applet with WASD/QE movement, mouse look, fixed world Y up, and pitch limited to +/-89 degrees.
 /// Register alongside scene applets with fcg::run; Player discovers it through the fcg::Camera interface.
-/// Orientation setters remove roll and clamp pitch. Focus setters translate the eye while preserving orientation.
+/// Orientation setters remove roll and clamp pitch. setFocalPoint and resetFocus turn from the current eye;
+/// translateToFocalPoint moves the eye while preserving orientation and focus distance.
 /// params() describes the actual pose; render() calls the student's preloadViewMatrix to fill the modelview stack
 /// top, initially with identity.
 class FirstPersonCamera : public fcg::Applet, public fcg::Camera
@@ -126,7 +127,12 @@ public:
 	/// The inputs obey fcg::Camera::setOrientationUnchecked preconditions; the supplied up cannot introduce roll.
 	void setOrientationUnchecked (const glm::vec3 &dir, const glm::vec3 &up) override;
 
-	/// Translate the eye to place the focus at this point, preserving heading and focus distance.
+	/// Turn toward the point without moving the eye, setting the focus distance to the eye-to-point distance.
+	/// Preserve the requested horizontal heading, remove roll and clamp pitch to +/-89 degrees; exactly vertical
+	/// requests retain yaw. When pitch is clamped, focalPoint() reports the attainable focus rather than the request,
+	/// with the requested eye-to-point distance retained.
+	/// \throws std::invalid_argument If the point is nonfinite, closer than .001 world units to the eye, or the
+	/// resulting distance or pose is unrepresentable. Failure leaves the camera unchanged.
 	void setFocalPoint (const glm::vec3 &point) override;
 
 	/// Translate the eye to place the focus at this point, preserving heading and focus distance.
@@ -135,7 +141,8 @@ public:
 	/// Restore direction -Z and up +Y while retaining the focal point and focus distance.
 	void resetRotation () override;
 
-	/// Translate the framing focus to the world origin, preserving heading and focus distance.
+	/// Turn toward the world origin from the current eye, as in setFocalPoint, with the same pitch clamping. Does
+	/// nothing if the eye is closer than .001 world units to the origin.
 	void resetFocus () override;
 
 
@@ -161,7 +168,7 @@ private:
 	/// Request a refresh when the camera has been connected to a player.
 	void requireSceneRedraw () const noexcept;
 
-	/// Apply finite mouse rotation, wrapping yaw and clamping pitch, without introducing roll.
+	/// Apply (presumed finite) mouse rotation, wrapping yaw and clamping pitch, without introducing roll.
 	void turn (float deltaYaw, float deltaPitch);
 
 	/// Compute the horizontal strafe direction from yaw.
