@@ -31,8 +31,8 @@
 /// Register alongside scene applets with fcg::run; Player discovers it through the fcg::Camera interface.
 /// Orientation setters remove roll and clamp pitch. setFocalPoint and resetFocus turn from the current eye;
 /// translateToFocalPoint moves the eye while preserving orientation and focus distance.
-/// params() describes the actual pose; render() calls the student's preloadViewMatrix to fill the modelview stack
-/// top, initially with identity.
+/// params() describes the actual pose; render() fills the modelview stack top with the student calculation selected
+/// in the GUI, defaulting to preloadViewMatrix, and validates that result against glm::lookAt.
 class FirstPersonCamera : public fcg::Applet, public fcg::Camera
 {
 public:
@@ -81,13 +81,13 @@ public:
 	/// Accept keyboard and mouse navigation after scene applets have had an opportunity to consume the event.
 	void onEvent (const fcg::Event &event, fcg::EventContext &context, fcg::Player &player) override;
 
-	/// Display the camera pose, navigation settings and control instructions.
+	/// Edit the camera pose and display view-matrix calculation options, navigation settings and control instructions.
 	void gui (fcg::Device &device, fcg::Player &player) override;
 
 	/// Reconcile held input and renew postRedraw while keyboard movement is requested.
 	void update (fcg::Device &device, fcg::Player &player, float dt) override;
 
-	/// Install the student's modelview and the provided projection before ordinary scene applets render.
+	/// Install the selected student modelview and the provided projection, validating the view against glm::lookAt.
 	void render (
 		fcg::Device &device, fcg::RenderState &state, SDL_GPURenderPass *pass, SDL_GPUCommandBuffer *command,
 		fcg::Player &player
@@ -160,10 +160,32 @@ public:
 private:
 
 	////
+	// Types and constants
+
+	enum class ViewMatrixVariant {
+		OnStackPoseFromParams,
+		InverseOfModel,
+		InverseOfConcatModels,
+		ConcatOfSystems
+	};
+
+	/// Labels follow the enum order and also identify the selected calculation in validation warnings.
+	static constexpr std::array<const char*, 4> viewMatrixVariantLabels{
+		"on-stack from [pos,yaw,pitch]",
+		"invert camera model transform",
+		"invert concatenated model transforms",
+		"concatenate system transforms"
+	};
+
+
+	////
 	// Methods
 
 	/// Validate a candidate pose before publishing parameters and angles together and requesting a refresh.
 	void commitParameters (const fcg::CameraParameters &next, float yaw, float pitch);
+
+	/// Set an absolute pose with angles in radians, wrapping yaw and clamping pitch before committing atomically.
+	void setPose (const glm::vec3 &eye, double yaw, double pitch);
 
 	/// Request a refresh when the camera has been connected to a player.
 	void requireSceneRedraw () const noexcept;
@@ -184,11 +206,17 @@ private:
 		.extrinsics = {.eye={0, 0, 0}, .dir={0, 0, -1}, .up={0, 1, 0}}
 	};
 
+	/// Selected student calculation, retained when this camera is deactivated and reactivated.
+	ViewMatrixVariant viewMatrixVariant = ViewMatrixVariant::OnStackPoseFromParams;
+
 	/// Horizontal angle in radians, positive to the right and wrapped to [-pi,pi].
 	float m_yaw = 0.f;
 
 	/// Vertical angle in radians, positive upwards and restricted to +/-89 degrees.
 	float m_pitch = 0.f;
+
+	/// Last rejected GUI pose edit; cleared after the next successful edit.
+	std::string poseEditError;
 
 	/// Player borrowed during initialization; no setters require it before initialization.
 	fcg::Player *m_player = nullptr;

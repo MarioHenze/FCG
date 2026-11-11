@@ -31,7 +31,7 @@
 /// \param offset The translation vector.
 ///
 /// \return The 4x4 homogeneous translation matrix.
-static glm::mat4 translate (const glm::vec3 &offset) {
+inline static glm::mat4 translate (const glm::vec3 &offset) {
 	return glm::translate(glm::mat4(1), offset);
 }
 
@@ -41,7 +41,7 @@ static glm::mat4 translate (const glm::vec3 &offset) {
 /// \param angle Angle in radians, positive is counter-clockwise.
 ///
 /// \return The 4x4 homogeneous rotation matrix.
-static glm::mat4 rotateAroundAxis (const glm::vec3 &axis, float angle) {
+inline static glm::mat4 rotateAroundAxis (const glm::vec3 &axis, float angle) {
 	return glm::rotate(glm::mat4(1), angle, axis);
 }
 
@@ -50,7 +50,7 @@ static glm::mat4 rotateAroundAxis (const glm::vec3 &axis, float angle) {
 /// \param angle Angle in radians, positive is counter-clockwise.
 ///
 /// \return The 4x4 homogeneous rotation matrix.
-static glm::mat4 rotateX (float angle) {
+inline static glm::mat4 rotateX (float angle) {
 	return rotateAroundAxis({1, 0, 0}, angle);
 }
 
@@ -59,7 +59,7 @@ static glm::mat4 rotateX (float angle) {
 /// \param angle Angle in radians, positive is counter-clockwise.
 ///
 /// \return The 4x4 homogeneous rotation matrix.
-static glm::mat4 rotateY (float angle) {
+inline static glm::mat4 rotateY (float angle) {
 	return rotateAroundAxis({0, 1, 0}, angle);
 }
 
@@ -68,7 +68,7 @@ static glm::mat4 rotateY (float angle) {
 /// \param angle Angle in radians, positive is counter-clockwise.
 ///
 /// \return The 4x4 homogeneous rotation matrix.
-static glm::mat4 rotateZ (float angle) {
+inline static glm::mat4 rotateZ (float angle) {
 	return rotateAroundAxis({0, 0, 1}, angle);
 }
 
@@ -79,19 +79,101 @@ static glm::mat4 rotateZ (float angle) {
 // Function implementations
 //
 
+// Preload the view (world-to-camera) matrix onto the current modelview matrix stack.
+//
+// `state` – The render state, holding the matrix stacks for the current pass.
+// `position` – The camera's position in world units.
+// `yaw` – Horizontal viewing angle in radians.
+// `pitch` – Vertical viewing angle in radians, restricted to [-89 degrees, +89 degrees] by the controller.
 void preloadViewMatrix (fcg::RenderState &state, const glm::vec3 &position, float yaw, float pitch)
 {
 	// TODO: initialize modelview matrix for the first-person camera
-	//  Construct the view (world-to-camera) transformation from position, yaw, and pitch (angles in radians).
-	//  When this function returns, the top of state's modelview matrix stack must contain that view matrix.
-	//  At zero angles the camera looks along -Z, with +Y up. Positive yaw looks right; positive pitch looks up.
+	//  Construct the view (world-to-camera) system transformation from position, yaw, and pitch (angles in radians).
+	//  When this function returns, the top of the modelview matrix stack in `state` must contain that view matrix.
 	//
-	//  Think about how to place and orient a camera in the world, then "undo" that transformation for the scene.
-	//  Build the elementary matrices with the provided translate(offset), rotate..(angle) helpers.
-	//  All rotation angles are in radians; choose the appropriate axes and signs for the camera transform.
+	//  At zero angles, the camera looks along -Z, with +Y up. Positive yaw looks right; positive pitch looks up.
+	//
+	//  To compose the view matrix, think about how to place and orient a camera in the world, then "undo" these
+	//  transformations for the scene.
+	//  Get the elementary matrices with the provided translate(offset), rotate..(angle) helpers, chosing the correct
+	//  order of elementary transforms, rotation axes, and angle signs. Pay special attention how positive/negative
+	//  angles relate to counter-/clockwise rotations around an axis (check the documentation of the helpers above for
+	//  details).
+	//  All rotation angles here are in radians.
 	//
 	//  The helpers return matrices. Use state.loadModelviewMatrix(matrix) to replace the stack top, and
 	//  state.mulModelviewMatrix(matrix) to apply further transforms individually: each call sets top = top * matrix.
 	//  Pay attention to the multiplication order: we use column vectors, so in `A * B * point`, B acts first.
 	state.loadModelviewMatrix(glm::mat4(1.f));
+}
+
+/// Obtain the view matrix by directly constructing the camera's model transformation (where the camera is in the
+/// world) from the extrinsic parameters (eye, dir, up) and inverting that into a system transformation.
+auto viewMatrixFromInvertedModel (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4
+{
+	// Positive camera-local axes expressed in world space. In our right-handed camera convention, the camera looks
+	// along local -Z, so its positive Z axis points opposite to the world-space viewing direction.
+	const glm::vec3 camBaseVecX = glm::normalize(glm::cross(extrinsics.dir, extrinsics.up));
+	const glm::vec3 camBaseVecY = extrinsics.up;
+	const glm::vec3 camBaseVecZ = -extrinsics.dir;
+
+	// TODO: view from the directly assembled camera model transform
+	//  Build the view matrix from the camera axes pre-set above and `extrinsics.eye`. Directly construct the camera
+	//  model transform (move and orient the camera in the world like an object) by initializing its matrix columns, and
+	//  then invert it to obtain the world-to-camera system transform. Store the result in viewMatrix.
+	//
+	//  NOTE: distinguish directions from positions when choosing each homogeneous w-component. Use `glm::inverse` to
+	//  compute matrix inversion.
+	glm::mat4 viewMatrix(1.f);
+	return viewMatrix;
+}
+
+/// Build the view by expressing the camera orientation (from extrinsic params dir and up) and translation (eye) as
+/// separate model transforms (how the camera is rotated and where it is located in the world), then inverting the
+/// concatenation into a system transformation.
+auto viewMatrixFromInvertedConcatModels (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4
+{
+	// Positive camera-local axes expressed in world space. In our right-handed camera convention, the camera looks
+	// along local -Z, so its positive Z axis points opposite to the world-space viewing direction.
+	const glm::vec3 camBaseVecX = glm::normalize(glm::cross(extrinsics.dir, extrinsics.up));
+	const glm::vec3 camBaseVecY = extrinsics.up;
+	const glm::vec3 camBaseVecZ = -extrinsics.dir;
+
+	// TODO: view from the concatenated separate camera model transforms
+	//  Build the view matrix from the camera axes pre-set above and `extrinsics.eye`. First determine the camera pose
+	//  by concatenating seperate model transformations for orientation (from camera basis vectors) and translation
+	//  (from `extrinsics.eye`) *in the correct order for model transforms*, then invert that concatenation into a
+	//  system transform. Store the result in viewMatrix.
+	//
+	//  NOTE: you can construct each individual model transform by setting its columns (also in-place in the
+	//  constructor). Use `glm::inverse` to compute matrix inversion.
+	glm::mat4 viewMatrix(1.f);
+	return viewMatrix;
+}
+
+/// Build the view by concatenating separate system transforms for orientation (how the scene rotates around the
+/// camera) and translation (how the scene translates relative to the camera).
+auto viewMatrixFromConcatOfSystems (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4
+{
+	// Positive camera-local axes expressed in world space. In our right-handed camera convention, the camera looks
+	// along local -Z, so its positive Z axis points opposite to the world-space viewing direction.
+	const glm::vec3 camBaseVecX = glm::normalize(glm::cross(extrinsics.dir, extrinsics.up));
+	const glm::vec3 camBaseVecY = extrinsics.up;
+	const glm::vec3 camBaseVecZ = -extrinsics.dir;
+
+	// TODO: view from concatenated separate system transforms
+	//  Build the view matrix from the camera axes pre-set above and `extrinsics.eye`. The goal is to assemble the view
+	//  matrix directly by concatenating system transforms (essentially like you did in `preloadViewMatrix`, but you
+	//  don't have access to the angle parameters yaw and pitch here). Then store the result in viewMatrix.
+	//
+	//  Remember that system transforms are inverse of model transforms, so you can either build the separate system
+	//  transforms by inverting the orientation and translation model transforms (the same transforms you calculated in
+	//  `viewMatrixFromInvertedConcatModels` above), or you can construct them in place from the base vectors and
+	//  `extrinsics.eye`, thus completely avoiding expensive matrix inversion.
+	//
+	//  NOTE: to construct the separate system transforms from the extrinsic parameters in-place, remember that the
+	//  inverse of a rotation matrix is just its transpose, and the inverse of a translation matrix is just a
+	//  translation in the opposite direction.
+	glm::mat4 viewMatrix(1.f);
+	return viewMatrix;
 }

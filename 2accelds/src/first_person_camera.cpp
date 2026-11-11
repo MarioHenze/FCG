@@ -5,6 +5,7 @@
 //
 
 // C++ STL
+#include <iostream>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -37,6 +38,62 @@
 
 // Anonymous namespace begin
 namespace {
+
+/// Compare finite matrix elements using epsilon as both an absolute and a relative tolerance.
+[[nodiscard]] auto matricesAgree (
+	const glm::mat4 &A, const glm::mat4 &B, float epsilon=64*std::numeric_limits<float>::epsilon()
+) -> bool
+{
+	constexpr unsigned numTestPoints = 9;
+	constexpr glm::vec4 testPoints[numTestPoints] = {
+		{128, 512, 384, 1}, {-128, 512, 384, 1}, {128, -512, 384, 1},
+		{128, 512, -384, 1}, {-128, -512, 384, 1}, {128, -512, -384, 1},
+		{-128, 512, -384, 1}, {-128, -512, -384, 1}, {0, 0, 0, 1}
+	};
+	for (unsigned i=0; i<numTestPoints; ++i)
+	{
+		const auto testA = A * testPoints[i];
+		const auto testB = B * testPoints[i];
+		const auto diff = testA - testB;
+		const auto diff_mag = glm::length(diff);
+		const float eps_effective = std::max(
+			epsilon*std::max(glm::length(glm::vec3(testA)), glm::length(glm::vec3(testB))), epsilon
+		);
+		if (diff_mag > eps_effective)
+			return false;
+	}
+	return true;
+}
+
+/// Check if view matrix \c V agrees with the reference \c V_ref using <tt>\ref matricesAgree</tt> and if not, print a
+/// warning to the console.
+auto viewMatricesAgree (const glm::mat4 &V, const glm::mat4 &V_ref, const char *variant) -> bool
+{
+	if (!matricesAgree(V, V_ref))
+	{
+		// save stream precision and alignment, then set for our printing
+		const auto oldPrecision = std::cerr.precision();
+		const auto oldFlags = std::cerr.flags();
+		std::cerr.precision(5);
+		std::cerr.flags(std::ios::fixed | std::ios::showpoint);
+		std::cerr << "View matrix is not correct (" << variant << "):\nyours = (\n"
+		          << "\t" << V[0][0] << ", " << V[1][0] << ", " << V[2][0] << ", " << V[3][0] << "\n"
+		          << "\t" << V[0][1] << ", " << V[1][1] << ", " << V[2][1] << ", " << V[3][1] << "\n"
+		          << "\t" << V[0][2] << ", " << V[1][2] << ", " << V[2][2] << ", " << V[3][2] << "\n"
+		          << "\t" << V[0][3] << ", " << V[1][3] << ", " << V[2][3] << ", " << V[3][3] << "\n"
+		          << "), reference = (\n"
+		          << "\t" << V_ref[0][0] << ", " << V_ref[1][0] << ", " << V_ref[2][0] << ", " << V_ref[3][0] << "\n"
+		          << "\t" << V_ref[0][1] << ", " << V_ref[1][1] << ", " << V_ref[2][1] << ", " << V_ref[3][1] << "\n"
+		          << "\t" << V_ref[0][2] << ", " << V_ref[1][2] << ", " << V_ref[2][2] << ", " << V_ref[3][2] << "\n"
+		          << "\t" << V_ref[0][3] << ", " << V_ref[1][3] << ", " << V_ref[2][3] << ", " << V_ref[3][3]
+		          << ")"  "\n";
+		// restore stream precision and alignment
+		std::cerr.precision(oldPrecision);
+		std::cerr.flags(oldFlags);
+		return false;
+	}
+	return true;
+}
 
 /// Reject nonfinite camera inputs before changing state.
 void requireFinite (float value) {
@@ -79,13 +136,16 @@ void validatePose (const fcg::CameraParameters &params)
 
 /// Compute a finite far plane strictly beyond the given near plane, following the framework camera convention.
 [[nodiscard]] auto minimumFar (float nearPlane) -> float {
-	const float result = std::max(nearPlane + .001f, std::nextafter(nearPlane, std::numeric_limits<float>::infinity()));
+	const float result = std::max(
+		nearPlane + .001f, std::nextafter(nearPlane, std::numeric_limits<float>::infinity())
+	);
 	requireFinite(result);
 	return result;
 }
 
 /// Convert a finite direction to yaw and clamped pitch, retaining yaw for vertical requests.
-[[nodiscard]] auto viewAngles (const glm::dvec3 &dir, float currentYaw) -> std::pair<float, float> {
+[[nodiscard]] auto viewAngles (const glm::dvec3 &dir, float currentYaw) -> std::pair<float, float>
+{
 	const double horizontal = std::hypot(dir.x, dir.z);
 	if (horizontal == 0. && dir.y == 0.)
 		throw std::invalid_argument("Camera direction must be nonzero");
@@ -154,6 +214,23 @@ void FirstPersonCamera::commitParameters (const fcg::CameraParameters &next, flo
 	m_yaw = yaw;
 	m_pitch = pitch;
 	requireSceneRedraw();
+}
+
+void FirstPersonCamera::setPose (const glm::vec3 &eye, double yaw, double pitch)
+{
+	requireFinite(eye);
+	if (!std::isfinite(yaw) || !std::isfinite(pitch))
+		throw std::invalid_argument("Camera input must be finite");
+
+	// Keep an unchanged stored yaw exact, including the float representation of +/-pi at the wrap boundary.
+	const float nextYaw = yaw == double(m_yaw) ? m_yaw : float(std::remainder(yaw, glm::two_pi<double>()));
+	const float nextPitch = float(std::clamp(
+		pitch, -double(glm::radians(89.f)), double(glm::radians(89.f))
+	));
+	auto next = m_params;
+	next.extrinsics.eye = eye;
+	setAxes(next, nextYaw, nextPitch);
+	commitParameters(next, nextYaw, nextPitch);
 }
 
 void FirstPersonCamera::setFovY (const fcg::CameraParameters::Intrinsics::FovY &fovY)
@@ -247,13 +324,7 @@ auto FirstPersonCamera::right () const -> glm::vec3 {
 
 void FirstPersonCamera::turn (float deltaYaw, float deltaPitch)
 {
-	const float yaw = float(std::remainder(double(m_yaw) + deltaYaw, glm::two_pi<double>()));
-	const float pitch = float(std::clamp(
-		double(m_pitch) + deltaPitch, -double(glm::radians(89.f)), double(glm::radians(89.f))
-	));
-	auto next = m_params;
-	setAxes(next, yaw, pitch);
-	commitParameters(next, yaw, pitch);
+	setPose(m_params.extrinsics.eye, double(m_yaw) + deltaYaw, double(m_pitch) + deltaPitch);
 }
 
 void FirstPersonCamera::fitBounds (const glm::dvec3 &minimum, const glm::dvec3 &maximum, const glm::uvec2 &viewport)
@@ -280,18 +351,39 @@ void FirstPersonCamera::fitBounds (const glm::dvec3 &minimum, const glm::dvec3 &
 }
 
 void FirstPersonCamera::render (
-	fcg::Device&, fcg::RenderState &state, SDL_GPURenderPass*, SDL_GPUCommandBuffer*, fcg::Player &player
+	fcg::Device&, fcg::RenderState &state, SDL_GPURenderPass*, SDL_GPUCommandBuffer*, fcg::Player&
 ){
-	auto viewport = state.viewportSize();
-	if (!viewport.x || !viewport.y)
-		viewport = player.viewportSize();
-	if (!viewport.x || !viewport.y)
-		return;
+	// Evaluate actual matrices at render time so any changes that happened during this frame's GUI or update hooks
+	// already affect this scene pass.
 
-	// Evaluate at render time so changes from another applet's GUI already affect this scene pass
-	// Camera::modelviewMatrix computes a reference view; rendering must exercise the student's calculation instead
-	preloadViewMatrix(state, m_params.extrinsics.eye, m_yaw, m_pitch);
-	state.loadProjectionMatrix(projectionMatrix(viewport));
+	// Preload projection matrix
+	const auto &viewport = state.viewportSize();
+	if (viewport.x && viewport.y)
+		// We can only set a projection matrix if there is a viewport. Otherwise it will stay the identity.
+		state.loadProjectionMatrix(projectionMatrix(viewport));
+
+	// Execute only the selected student calculation and use its result for the scene, even when validation fails.
+	const auto &extrinsics = m_params.extrinsics;
+	switch (viewMatrixVariant) {
+		case ViewMatrixVariant::OnStackPoseFromParams:
+			preloadViewMatrix(state, extrinsics.eye, m_yaw, m_pitch);
+			break;
+		case ViewMatrixVariant::InverseOfModel:
+			state.loadModelviewMatrix(viewMatrixFromInvertedModel(extrinsics));
+			break;
+		case ViewMatrixVariant::InverseOfConcatModels:
+			state.loadModelviewMatrix(viewMatrixFromInvertedConcatModels(extrinsics));
+			break;
+		case ViewMatrixVariant::ConcatOfSystems:
+			state.loadModelviewMatrix(viewMatrixFromConcatOfSystems(extrinsics));
+			break;
+	}
+
+	// Float lookAt rounds eye + dir; allow for that extra error when checking the student result.
+	const auto reference = glm::lookAt(extrinsics.eye, extrinsics.eye + extrinsics.dir, extrinsics.up);
+	viewMatricesAgree(
+		state.modelviewMatrix(), reference, viewMatrixVariantLabels[static_cast<std::size_t>(viewMatrixVariant)]
+	);
 }
 
 void FirstPersonCamera::onEvent (const fcg::Event &event, fcg::EventContext &context, fcg::Player &player)
@@ -377,8 +469,38 @@ void FirstPersonCamera::gui (fcg::Device&, fcg::Player &player)
 	ImGui::SetNextWindowPos({viewport->WorkPos.x + padding.x, viewport->WorkPos.y + padding.y}, ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(player.toGuiUnits(ImVec2(310.f, 0.f)), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(appletName)) {
-		ImGui::Text("Position: %.3f, %.3f, %.3f", m_params.extrinsics.eye.x, m_params.extrinsics.eye.y, m_params.extrinsics.eye.z);
-		ImGui::Text("Yaw: %.1f deg, pitch: %.1f deg", glm::degrees(m_yaw), glm::degrees(m_pitch));
+		auto eye = m_params.extrinsics.eye;
+		float yawDegrees = glm::degrees(m_yaw), pitchDegrees = glm::degrees(m_pitch);
+		const bool positionChanged = ImGui::DragFloat3("Position", &eye.x, .02f * sceneSpeed, 0.f, 0.f, "%.3f");
+		const bool yawChanged = ImGui::DragFloat("Yaw", &yawDegrees, 1.f, 0.f, 0.f, "%.1f deg");
+		const bool pitchChanged = ImGui::DragFloat(
+			"Pitch", &pitchDegrees, 1.f, -89.f, 89.f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp
+		);
+		if (positionChanged || yawChanged || pitchChanged) {
+			try {
+				// Only convert angles that were edited, so position changes cannot introduce angular rounding drift.
+				setPose(
+					eye, yawChanged ? glm::radians(double(yawDegrees)) : double(m_yaw),
+					pitchChanged ? glm::radians(double(pitchDegrees)) : double(m_pitch)
+				);
+				stopNavigation();
+				poseEditError.clear();
+			}
+			catch (const std::invalid_argument &exception) {
+				poseEditError = exception.what();
+			}
+		}
+		if (!poseEditError.empty())
+			ImGui::TextWrapped("Cannot set camera pose: %s", poseEditError.c_str());
+		ImGui::SeparatorText("View matrix calculation");
+		for (std::size_t i = 0; i < viewMatrixVariantLabels.size(); ++i) {
+			const auto variant = static_cast<ViewMatrixVariant>(i);
+			if (ImGui::RadioButton(viewMatrixVariantLabels[i], viewMatrixVariant == variant)) {
+				viewMatrixVariant = variant;
+				player.requireSceneRedraw();
+			}
+		}
+		ImGui::Separator();
 		ImGui::SliderFloat("Speed factor", &speedFactor, .01f, 10.f, "%.2f", ImGuiSliderFlags_Logarithmic);
 		ImGui::SliderFloat("Sensitivity", &sensitivity, .01f, 1.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::TextWrapped("W/S: move forward/backward along the view. A/D: strafe left/right.");
