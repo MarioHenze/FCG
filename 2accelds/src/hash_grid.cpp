@@ -6,7 +6,10 @@
 
 // C++ STL
 #include <algorithm>
-#include <stdexcept>
+#include <stdexcept> // std::logic_error in the generated handout's TODO stubs
+
+// Local includes
+#include "primitives.h"
 
 // Implemented header
 #include "hash_grid.h"
@@ -44,8 +47,7 @@ auto pointToCell (const glm::vec3 &point, const glm::vec3 &cellWidths) -> GridCe
 
 void voxelizeBox (
 	const glm::vec3 &minCorner, const glm::vec3 &maxCorner, const glm::vec3 &cellWidths, std::vector<GridCell> &cells
-)
-{
+){
 	// Convert the corner positions to the overlapped index range
 	const auto first = pointToCell(minCorner, cellWidths);
 	const auto last = pointToCell(maxCorner, cellWidths);
@@ -61,104 +63,158 @@ void voxelizeBox (
 
 auto cellIntersectsSphere (
 	const GridCell &cell, const glm::vec3 &cellWidths, const glm::vec3 &center, float radius
-) -> bool
-{
-	// The sphere overlaps the cell's box when its center is within radius of the closest box point
+) -> bool {
 	const glm::vec3 cellMin = glm::vec3{cell.toIVec3()} * cellWidths;
-	const glm::vec3 closest = glm::clamp(center, cellMin, cellMin + cellWidths);
-	const glm::vec3 offset = center - closest;
-	return glm::dot(offset, offset) <= radius * radius;
+	return SpherePrimitive{center, radius}.intersectsBox(cellMin, cellMin + cellWidths);
 }
 
 void voxelizeSphere (
 	const glm::vec3 &center, float radius, const glm::vec3 &cellWidths, std::vector<GridCell> &cells
-)
-{
-	// Enumerate the cells overlapped by the sphere's bounding box and keep the ones touching the sphere
-	const glm::vec3 extent{radius};
-	const auto first = pointToCell(center - extent, cellWidths);
-	const auto last = pointToCell(center + extent, cellWidths);
-	for (int z = first.z; z <= last.z; ++z)
-		for (int y = first.y; y <= last.y; ++y)
-			for (int x = first.x; x <= last.x; ++x) {
-				const GridCell cell{x, y, z};
-				if (cellIntersectsSphere(cell, cellWidths, center, radius))
-					cells.push_back(cell);
-			}
+){
+	SpherePrimitive{center, radius}.voxelize(cellWidths, cells);
 }
 
+// Collect the deduplicated indices of the primitives intersecting an axis-aligned query box.
+//
+// `grid` – The grid's occupied cells.
+// `cellWidths` – The grid's cell extents per axis.
+// `center` – Box center in world coordinates.
+// `halfExtents` – Finite, nonnegative per-axis half-extents of the query box, in world units.
+// `lookupPrimitive` – Callable retrieving a primitive via its index.
+//
+// Return the matching primitive indices, each occurring once.
+template <Primitive P>
 auto queryCuboidIndices (
-	const GridCells &cells, const glm::vec3 &cellWidths, const glm::vec3 &center, const glm::vec3 &halfExtents,
-	const PositionLookup &positionOf
+	const GridCells &grid, const glm::vec3 &cellWidths, const glm::vec3 &center, const glm::vec3 &halfExtents,
+	const PrimitiveLookup<P> &lookupPrimitive
 ) -> std::vector<std::size_t>
 {
 	//## stub: cuboid radius query
 	//## gap:
-	//  Broad phase: use voxelizeBox() to enumerate the grid cells overlapped by the query box (from
-	//  center - halfExtents to center + halfExtents), then collect the primitive indices stored in those cells:
-	//  cells maps each occupied GridCell to the indices of the primitives overlapping it, and cells.find(cell)
-	//  returns cells.end() for unoccupied cells.
-	//  A primitive overlapping several cells shows up once per overlapped cell, so sort the collected indices and
-	//  remove the duplicates (std::sort and std::unique from <algorithm>).
-	//  Narrow phase: keep only the indices whose primitive position actually lies inside the query box. The
-	//  positionOf callback maps an index to its primitive's position, and a position is inside when its per-axis
-	//  distance from center does not exceed halfExtents (glm::abs gives per-axis absolute values).
+	//  Broad phase:
+	//  Use `voxelizeBox()` to enumerate the grid cells overlapped by the query box (from `center-halfExtents` to
+	//  `center+halfExtents`), then collect the primitive indices stored in those cells:
+	//  Each occupied `GridCell` maps to the indices of overlapping primitives, and `grid.find(cell)` returns
+	//  `grid.end()` for unoccupied cells.
+	//  A primitive overlapping several cells shows up once per overlapped cell, so deduplication is required. An
+	//  idiomatic way to do this in C++ for small lists is to sort the collected indices via `std::sort()` and then
+	//  remove all duplicates by first filtering via `std::unique()` and then pruning the tail via
+	//  `std::vector::erase()` (`sort` and `unique` from `#include <algorithm>`). You may use any other method however,
+	//  including hand-written loops or accumulating unique indices in an `std::set`.
+	//
+	//  Narrow phase:
+	//  Keep only the indices whose primitive intersects the query box, including those that just touch its boundary.
+	//  The `lookupPrimitive` callable fetches you the primitive for a given index; call its `intersectsBox()` method
+	//  with the query box to decide if it needs to be dropped from the list you return.
 	//## solution
 	// Broad phase: collect the primitive indices of every cell overlapped by the query box
+	const glm::vec3 minCorner = center - halfExtents;
+	const glm::vec3 maxCorner = center + halfExtents;
 	std::vector<GridCell> candidates;
-	voxelizeBox(center - halfExtents, center + halfExtents, cellWidths, candidates);
+	voxelizeBox(minCorner, maxCorner, cellWidths, candidates);
 	std::vector<std::size_t> indices;
 	for (const auto &cell : candidates)
-		if (const auto bucket = cells.find(cell); bucket != cells.end())
+		if (const auto bucket = grid.find(cell); bucket != grid.end())
 			indices.insert(indices.end(), bucket->second.begin(), bucket->second.end());
 
-	// Deduplicate; primitives overlapping several cells appear once per overlapped cell
+	// Deduplicate: primitives overlapping several cells might appear several times, once per overlapped cell
+	// - sort the collected indices, so duplicates will show up next to each other
 	std::sort(indices.begin(), indices.end());
-	indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+	// - in-place remove all duplicates and compact the vector elements, remembering the first now-unused slot in the
+	//   vector
+	const auto firstUnusedItem = std::unique(indices.begin(), indices.end());
+	// - prune the vector tail, which is as long as there were duplicates, and now likely contains garbage
+	indices.erase(firstUnusedItem, indices.end());
 
-	// Narrow phase: keep only primitives whose position lies inside the query box
-	std::erase_if(indices, [&] (std::size_t index) {
-		const glm::vec3 offset = glm::abs(positionOf(index) - center);
-		return offset.x > halfExtents.x || offset.y > halfExtents.y || offset.z > halfExtents.z;
+	// Narrow phase: keep only primitives intersecting the query box
+	std::erase_if(indices, [&](std::size_t index) {
+		return !lookupPrimitive(index).intersectsBox(minCorner, maxCorner);
 	});
 	return indices;
 	//## end
 }
 
+// Collect the deduplicated indices of the primitives intersecting a query sphere.
+//
+// `grid` – The grid's occupied cells.
+// `cellWidths` – The grid's cell extents per axis.
+// `center` – Sphere center in world coordinates.
+// `radius` – Finite, nonnegative query radius in world units.
+// `lookupPrimitive` – Callable retrieving a primitive via its index.
+//
+// Return the matching primitive indices, each occurring once.
+template <Primitive P>
 auto querySphereIndices (
-	const GridCells &cells, const glm::vec3 &cellWidths, const glm::vec3 &center, float radius,
-	const PositionLookup &positionOf
+	const GridCells &grid, const glm::vec3 &cellWidths, const glm::vec3 &center, float radius,
+	const PrimitiveLookup<P> &lookupPrimitive
 ) -> std::vector<std::size_t>
 {
 	//## stub: spherical radius query
 	//## gap:
-	//  Broad phase: use voxelizeSphere() to enumerate the grid cells overlapped by the query sphere, then collect
-	//  the primitive indices stored in those cells: cells maps each occupied GridCell to the indices of the
-	//  primitives overlapping it, and cells.find(cell) returns cells.end() for unoccupied cells.
-	//  A primitive overlapping several cells shows up once per overlapped cell, so sort the collected indices and
-	//  remove the duplicates (std::sort and std::unique from <algorithm>).
-	//  Narrow phase: keep only the indices whose primitive position actually lies inside the query sphere. The
-	//  positionOf callback maps an index to its primitive's position, and a position is inside when its squared
-	//  distance from center does not exceed the squared radius.
+	//  Broad phase:
+	//  Use `voxelizeSphere()` to enumerate the grid cells overlapped by the query sphere, then collect the primitive
+	//  indices stored in those cells:
+	//  Each occupied `GridCell` maps to the indices of overlapping primitives, and `grid.find(cell)` returns
+	//  `grid.end()` for unoccupied cells.
+	//  A primitive overlapping several cells shows up once per overlapped cell, so deduplication is required. An
+	//  idiomatic way to do this in C++ for small lists is to sort the collected indices via `std::sort()` and then
+	//  remove all duplicates by first filtering via `std::unique()` and then pruning the tail via
+	//  `std::vector::erase()` (`sort` and `unique` from `#include <algorithm>`). You may use any other method however,
+	//  including hand-written loops or accumulating unique indices in an `std::set`.
+	//
+	//  Narrow phase:
+	//  Keep only the indices whose primitive intersects the query sphere, including those that just touch its boundary.
+	//  The `lookupPrimitive` callable fetches you the primitive for a given index; call its `intersectsSphere()` method
+	//  with the query sphere to decide if it needs to be dropped from the list you return.
 	//## solution
 	// Broad phase: collect the primitive indices of every cell overlapped by the query sphere
 	std::vector<GridCell> candidates;
 	voxelizeSphere(center, radius, cellWidths, candidates);
 	std::vector<std::size_t> indices;
 	for (const auto &cell : candidates)
-		if (const auto bucket = cells.find(cell); bucket != cells.end())
+		if (const auto bucket = grid.find(cell); bucket != grid.end())
 			indices.insert(indices.end(), bucket->second.begin(), bucket->second.end());
 
-	// Deduplicate; primitives overlapping several cells appear once per overlapped cell
+	// Deduplicate: primitives overlapping several cells might appear several times, once per overlapped cell
+	// - sort the collected indices, so duplicates will show up next to each other
 	std::sort(indices.begin(), indices.end());
-	indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+	// - in-place remove all duplicates and compact the vector elements, remembering the first now-unused slot in the
+	//   vector
+	const auto firstUnusedItem = std::unique(indices.begin(), indices.end());
+	// - prune the vector tail, which is as long as there were duplicates, and now likely contains garbage
+	indices.erase(firstUnusedItem, indices.end());
 
-	// Narrow phase: keep only primitives whose position lies inside the query sphere
-	const float radiusSquared = radius * radius;
-	std::erase_if(indices, [&] (std::size_t index) {
-		const glm::vec3 offset = positionOf(index) - center;
-		return glm::dot(offset, offset) > radiusSquared;
+	// Narrow phase: keep only primitives intersecting the query sphere
+	std::erase_if(indices, [&](std::size_t index) {
+		return !lookupPrimitive(index).intersectsSphere(center, radius);
 	});
 	return indices;
 	//## end
 }
+
+
+
+//////
+//
+// Explicit template instantiations
+//
+
+// Instantiate once per primitive type known to us, independently of the HashGrid parent implementation. Using the
+// exercise code with any other primitive would require adding the corresponding instantiations here.
+// Normally these two template functions would be defined in the header making this unnecessary, but this facilitates
+// self-contained handouts.
+template auto queryCuboidIndices<SpherePrimitive> (
+	const GridCells&, const glm::vec3&, const glm::vec3&, const glm::vec3&, const PrimitiveLookup<SpherePrimitive>&
+) -> std::vector<std::size_t>;
+
+template auto querySphereIndices<SpherePrimitive> (
+	const GridCells&, const glm::vec3&, const glm::vec3&, float, const PrimitiveLookup<SpherePrimitive>&
+) -> std::vector<std::size_t>;
+
+template auto queryCuboidIndices<VertexPrimitive> (
+	const GridCells&, const glm::vec3&, const glm::vec3&, const glm::vec3&, const PrimitiveLookup<VertexPrimitive>&
+) -> std::vector<std::size_t>;
+
+template auto querySphereIndices<VertexPrimitive> (
+	const GridCells&, const glm::vec3&, const glm::vec3&, float, const PrimitiveLookup<VertexPrimitive>&
+) -> std::vector<std::size_t>;

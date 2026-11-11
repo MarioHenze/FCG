@@ -197,8 +197,8 @@ auto viewMatrixFromConcatOfSystems (const fcg::CameraParameters::Extrinsics &ext
 		{camBaseVecX.x, camBaseVecY.x, camBaseVecZ.x, 0},
 		{camBaseVecX.y, camBaseVecY.y, camBaseVecZ.y, 0},
 		{camBaseVecX.z, camBaseVecY.z, camBaseVecZ.z, 0},
-		{0, 0, 0, 1},
-	};
+		{0, 0, 0, 1}
+	}; // = inverse( orientation{vec4(camBaseVecX, 1), vec4(camBaseVecY, 1), vec4(camBaseVecZ, 1), vec4(0,0,0,1)} )
 	const auto translationSystem = translate(-extrinsics.eye);
 	viewMatrix = orientationSystem * translationSystem;
 	//## end

@@ -79,9 +79,6 @@ struct std::hash<GridCell>
 /// Map from an occupied grid cell to the indices of the primitives overlapping it.
 using GridCells = std::unordered_map<GridCell, std::vector<std::size_t>>;
 
-/// Callback returning the world-space position of the primitive with a given index.
-using PositionLookup = std::function<glm::vec3 (std::size_t)>;
-
 /// Smallest permitted grid cell width per axis, keeping the cell index conversion well-defined.
 inline constexpr float minCellWidth = 1e-5f;
 
@@ -95,11 +92,17 @@ inline constexpr float minCellWidth = 1e-5f;
 /// \brief Types that a HashGrid can index spatially.
 ///
 /// A primitive exposes a world-space \c position and a \c voxelize method appending every grid cell the primitive
-/// overlaps to a vector.
+/// overlaps to a vector. Its const intersection methods test a sphere (center and radius) and an axis-aligned box
+/// (minimum and maximum corners); touching boundaries count as intersections. Geometric inputs must be finite,
+/// radii nonnegative, and box corners ordered per axis.
 template <typename T>
-concept Primitive = requires (const T &primitive, const glm::vec3 &cellWidths, std::vector<GridCell> &cells) {
+concept Primitive = requires (
+	const T &primitive, const glm::vec3 &point, float radius, const glm::vec3 &cellWidths, std::vector<GridCell> &cells
+) {
 	{ primitive.position } -> std::convertible_to<glm::vec3>;
 	{ primitive.voxelize(cellWidths, cells) } -> std::same_as<void>;
+	{ primitive.intersectsSphere(point, radius) } -> std::same_as<bool>;
+	{ primitive.intersectsBox(point, point) } -> std::same_as<bool>;
 };
 
 /// \brief Random-access containers from which a HashGrid can read primitives by index.
@@ -111,6 +114,13 @@ concept PrimitiveStore =
 	std::ranges::random_access_range<const C> &&
 	std::ranges::sized_range<const C> &&
 	std::constructible_from<P, std::ranges::range_reference_t<const C>>;
+
+/// Callable returning the primitive corresponding to a given index. The fetched primitive is returned by-value, as some
+/// \ref PrimitiveStore "backing stores" might need to construct the \c Primitive wrapper on-demand. In such a case,
+/// these are typically thin, light-weight <em>accessor objects</em> that are cheap to create and copy, regardless of
+/// how big and heavy the actual underlying primitive is.
+template <Primitive P>
+using PrimitiveLookup = std::function<P(std::size_t)>;
 
 
 
@@ -161,38 +171,36 @@ void voxelizeSphere (
 	const glm::vec3 &center, float radius, const glm::vec3 &cellWidths, std::vector<GridCell> &cells
 );
 
-/// \brief Collect the deduplicated indices of the primitives whose position lies inside an axis-aligned query box.
+/// \brief Collect the deduplicated indices of the primitives intersecting an axis-aligned query box.
 ///
-/// In the broad phase, the primitive indices of all grid cells overlapped by the box are gathered and deduplicated;
-/// in the narrow phase, each candidate's position is tested against the box exactly.
-///
-/// \param cells The grid's occupied cells mapped to their primitive indices.
+/// \tparam P The indexed primitive type.
+/// \param grid The grid's occupied cells.
 /// \param cellWidths The grid's cell extents per axis.
 /// \param center Box center in world coordinates.
-/// \param halfExtents Box half-extents per axis in world units.
-/// \param positionOf Maps a primitive index to its world-space position.
+/// \param halfExtents Finite, nonnegative per-axis half-extents of the query box, in world units.
+/// \param lookupPrimitive Callable retrieving a primitive via its index.
 ///
 /// \return The matching primitive indices, sorted ascending, each occurring once.
+template <Primitive P>
 [[nodiscard]] auto queryCuboidIndices (
-	const GridCells &cells, const glm::vec3 &cellWidths, const glm::vec3 &center, const glm::vec3 &halfExtents,
-	const PositionLookup &positionOf
+	const GridCells &grid, const glm::vec3 &cellWidths, const glm::vec3 &center, const glm::vec3 &halfExtents,
+	const PrimitiveLookup<P> &lookupPrimitive
 ) -> std::vector<std::size_t>;
 
-/// \brief Collect the deduplicated indices of the primitives whose position lies inside a query sphere.
+/// \brief Collect the deduplicated indices of the primitives intersecting a query sphere.
 ///
-/// In the broad phase, the primitive indices of all grid cells overlapped by the sphere are gathered and
-/// deduplicated; in the narrow phase, each candidate's position is tested against the sphere exactly.
-///
-/// \param cells The grid's occupied cells mapped to their primitive indices.
+/// \tparam P The indexed primitive type.
+/// \param grid The grid's occupied cells.
 /// \param cellWidths The grid's cell extents per axis.
 /// \param center Sphere center in world coordinates.
-/// \param radius Sphere radius in world units.
-/// \param positionOf Maps a primitive index to its world-space position.
+/// \param radius Finite, nonnegative query radius in world units.
+/// \param lookupPrimitive Callable retrieving a primitive via its index.
 ///
 /// \return The matching primitive indices, sorted ascending, each occurring once.
+template <Primitive P>
 [[nodiscard]] auto querySphereIndices (
-	const GridCells &cells, const glm::vec3 &cellWidths, const glm::vec3 &center, float radius,
-	const PositionLookup &positionOf
+	const GridCells &grid, const glm::vec3 &cellWidths, const glm::vec3 &center, float radius,
+	const PrimitiveLookup<P> &lookupPrimitive
 ) -> std::vector<std::size_t>;
 
 
@@ -208,6 +216,7 @@ void voxelizeSphere (
 /// spherical radius queries by visiting only overlapped cells. Primitives are read by index from a caller-supplied
 /// random-access store, which may be an owning container or a zero-copy view of externally owned data. Rebuilding
 /// with new cell widths re-voxelizes the stored primitives; the store itself is left untouched.
+/// Query engines are explicitly instantiated per primitive type in hash_grid.cpp, independently of the container.
 ///
 /// \tparam P The indexed primitive type, satisfying the Primitive concept.
 /// \tparam Container The primitive store, satisfying the PrimitiveStore concept for \c P.
@@ -322,8 +331,7 @@ public:
 		}
 	}
 
-	/// \brief Collect the deduplicated indices of the primitives whose position lies inside an axis-aligned query
-	/// 	box.
+	/// \brief Collect the deduplicated indices of the primitives intersecting an axis-aligned query box.
 	///
 	/// \param center Box center in world coordinates.
 	/// \param halfExtents Box half-extents per axis in world units.
@@ -331,10 +339,10 @@ public:
 	/// \return The matching primitive indices, sorted ascending, each occurring once.
 	[[nodiscard]] auto queryCuboidIndices (const glm::vec3 &center, const glm::vec3 &halfExtents) const
 		-> std::vector<std::size_t> {
-		return ::queryCuboidIndices(m_cells, m_cellWidths, center, halfExtents, positionLookup());
+		return ::queryCuboidIndices<P>(m_cells, m_cellWidths, center, halfExtents, primitiveLookup());
 	}
 
-	/// \brief Collect the deduplicated indices of the primitives whose position lies inside a query sphere.
+	/// \brief Collect the deduplicated indices of the primitives intersecting a query sphere.
 	///
 	/// \param center Sphere center in world coordinates.
 	/// \param radius Sphere radius in world units.
@@ -342,10 +350,10 @@ public:
 	/// \return The matching primitive indices, sorted ascending, each occurring once.
 	[[nodiscard]] auto querySphereIndices (const glm::vec3 &center, float radius) const
 		-> std::vector<std::size_t> {
-		return ::querySphereIndices(m_cells, m_cellWidths, center, radius, positionLookup());
+		return ::querySphereIndices<P>(m_cells, m_cellWidths, center, radius, primitiveLookup());
 	}
 
-	/// \brief Collect the primitives whose position lies inside an axis-aligned query box.
+	/// \brief Collect the primitives intersecting an axis-aligned query box.
 	///
 	/// \param center Box center in world coordinates.
 	/// \param halfExtents Box half-extents per axis in world units.
@@ -362,7 +370,7 @@ public:
 		return matches;
 	}
 
-	/// \brief Collect the primitives whose position lies inside a query sphere.
+	/// \brief Collect the primitives intersecting a query sphere.
 	///
 	/// \param center Sphere center in world coordinates.
 	/// \param radius Sphere radius in world units.
@@ -384,9 +392,9 @@ private:
 	////
 	// Accessors
 
-	/// A lookup of primitive positions by index, for passing to the query engines.
-	[[nodiscard]] inline auto positionLookup () const -> PositionLookup {
-		return [this] (std::size_t index) { return glm::vec3{primitive(index).position}; };
+	/// A lookup of primitives by index, for passing to the query engines.
+	[[nodiscard]] inline auto primitiveLookup () const -> PrimitiveLookup<P> {
+		return [this] (std::size_t index) { return primitive(index); };
 	}
 
 

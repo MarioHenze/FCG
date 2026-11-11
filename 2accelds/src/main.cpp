@@ -40,70 +40,9 @@
 // Local includes
 #include "first_person_camera.h"
 #include "hash_grid.h"
+#include "primitives.h"
 #include "query_cursor.h"
 #include "triangle_soup.h"
-
-
-
-//////
-//
-// Structs and enums
-//
-
-/// \brief A mesh vertex with its sphere radius, ready for indexing in a HashGrid.
-///
-/// Satisfies the Primitive concept: the position is the vertex position, and voxelize() appends the cells overlapped
-/// by the vertex's sphere, which is the single cell containing the position when the radius is zero.
-struct VertexPrimitive
-{
-	/// World-space vertex position.
-	glm::vec3 position{};
-
-	/// Sphere radius from the mesh's "v:radius" vertex property; zero for a pure point.
-	float radius = 0.f;
-
-	/// The source vertex in its mesh.
-	OpenMesh::VertexHandle handle{};
-
-	/// A default primitive at the origin with zero radius.
-	VertexPrimitive () = default;
-
-	/// \brief Read position and radius from a smart vertex handle's mesh.
-	///
-	/// \param vh The smart vertex handle; must be valid and attached to a fcg::Mesh.
-	explicit VertexPrimitive (const OpenMesh::SmartVertexHandle &vh)
-		: VertexPrimitive(*static_cast<const fcg::Mesh*>(vh.mesh()), vh) {}
-
-	/// \brief Read the vertex position and the "v:radius" property, defaulting the radius to zero when absent.
-	///
-	/// \param mesh The mesh owning the vertex.
-	/// \param vh A valid vertex handle of \p mesh.
-	///
-	/// \throws std::invalid_argument If \p vh is not a valid handle.
-	VertexPrimitive (const fcg::Mesh &mesh, OpenMesh::VertexHandle vh) : handle(vh)
-	{
-		// Reject dangling handles outright
-		if (!vh.is_valid())
-			throw std::invalid_argument("Vertex primitive requires a valid vertex handle");
-
-		// Copy the vertex position
-		const auto &point = mesh.point(vh);
-		position = {point[0], point[1], point[2]};
-
-		// Read the sphere radius when the mesh provides it
-		OpenMesh::VPropHandleT<float> property;
-		if (mesh.get_property_handle(property, "v:radius"))
-			radius = mesh.property(property, vh);
-	}
-
-	/// \brief Append the grid cells overlapped by the vertex sphere.
-	///
-	/// \param cellWidths Grid cell extents; must be positive per axis.
-	/// \param cells Receives the overlapped cells.
-	void voxelize (const glm::vec3 &cellWidths, std::vector<GridCell> &cells) const {
-		voxelizeSphere(position, radius, cellWidths, cells);
-	}
-};
 
 
 

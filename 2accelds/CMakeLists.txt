@@ -8,6 +8,8 @@ set(EXERCISE_SOURCES
 	first_person_camera.cpp
 	hash_grid.h
 	hash_grid.cpp
+	primitives.h
+	primitives.cpp
 	query_cursor.h
 	triangle_soup.h
 	triangle_soup.cpp
