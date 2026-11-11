@@ -763,7 +763,9 @@ private:
 	void loadMesh (fcg::Device &device, const std::filesystem::path &path, fcg::Player &player)
 	{
 		// Load using the registry's default topology policy and retain any previous mesh on failure
-		auto loaded = fcg::MeshLoader::global().load(path);
+		auto loaded = fcg::MeshLoader::global().load(path, {
+			.topology = fcg::MeshTopologyPolicy::Repair
+		});
 		if (!loaded) {
 			reportError(std::format("Cannot load '{}': {}", path.string(), loaded.error().message));
 			return;
