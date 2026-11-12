@@ -305,7 +305,8 @@ void FirstPersonCamera::translateToFocalPoint (const glm::vec3 &point) {
 	setEye(checkedPosition(glm::dvec3(point) - double(m_params.intrinsics.f) * glm::dvec3(m_params.extrinsics.dir)));
 }
 
-void FirstPersonCamera::resetRotation () {
+void FirstPersonCamera::resetRotation ()
+{
 	auto next = m_params;
 	next.extrinsics.eye = checkedPosition(
 		glm::dvec3(focalPoint()) + glm::dvec3(0, 0, m_params.intrinsics.f)
@@ -364,15 +365,16 @@ void FirstPersonCamera::render (
 
 	// Execute only the selected student calculation and use its result for the scene, even when validation fails.
 	const auto &extrinsics = m_params.extrinsics;
-	switch (viewMatrixVariant) {
+	switch (viewMatrixVariant)
+	{
 		case ViewMatrixVariant::OnStackPoseFromParams:
 			preloadViewMatrix(state, extrinsics.eye, m_yaw, m_pitch);
 			break;
-		case ViewMatrixVariant::InverseOfModel:
-			state.loadModelviewMatrix(viewMatrixFromInvertedModel(extrinsics));
-			break;
 		case ViewMatrixVariant::InverseOfConcatModels:
 			state.loadModelviewMatrix(viewMatrixFromInvertedConcatModels(extrinsics));
+			break;
+		case ViewMatrixVariant::InverseOfModel:
+			state.loadModelviewMatrix(viewMatrixFromInvertedModel(extrinsics));
 			break;
 		case ViewMatrixVariant::ConcatOfSystems:
 			state.loadModelviewMatrix(viewMatrixFromConcatOfSystems(extrinsics));
@@ -453,8 +455,10 @@ void FirstPersonCamera::update (fcg::Device &device, fcg::Player &player, float 
 	const float forward = float(acceptedKeys[0]) - float(acceptedKeys[1]);
 	const float right = float(acceptedKeys[3]) - float(acceptedKeys[2]);
 	const float up = float(acceptedKeys[5]) - float(acceptedKeys[4]);
-	if (forward != 0.f || right != 0.f || up != 0.f) {
-		const auto direction = forward * m_params.extrinsics.dir + right * this->right() + up * m_params.extrinsics.up;
+	if (forward != 0.f || right != 0.f || up != 0.f)
+	{
+		const auto direction =
+			forward*m_params.extrinsics.dir + right*this->right() + up*m_params.extrinsics.up;
 		const float seconds = std::clamp(dt, 0.f, .1f);
 		setEye(m_params.extrinsics.eye + glm::normalize(direction) * (sceneSpeed * speedFactor * seconds));
 		// Post from movement intent even if dt is too small to change the floating-point position
@@ -468,11 +472,16 @@ void FirstPersonCamera::gui (fcg::Device&, fcg::Player &player)
 	const auto padding = ImGui::GetStyle().WindowPadding;
 	ImGui::SetNextWindowPos({viewport->WorkPos.x + padding.x, viewport->WorkPos.y + padding.y}, ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(player.toGuiUnits(ImVec2(310.f, 0.f)), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(appletName)) {
+	if (ImGui::Begin(appletName))
+	{
 		auto eye = m_params.extrinsics.eye;
 		float yawDegrees = glm::degrees(m_yaw), pitchDegrees = glm::degrees(m_pitch);
-		const bool positionChanged = ImGui::DragFloat3("Position", &eye.x, .02f * sceneSpeed, 0.f, 0.f, "%.3f");
-		const bool yawChanged = ImGui::DragFloat("Yaw", &yawDegrees, 1.f, 0.f, 0.f, "%.1f deg");
+		const bool positionChanged = ImGui::DragFloat3(
+			"Position", &eye.x, .02f * sceneSpeed, 0.f, 0.f, "%.3f"
+		);
+		const bool yawChanged = ImGui::DragFloat(
+			"Yaw", &yawDegrees, 1.f, 0.f, 0.f, "%.1f deg"
+		);
 		const bool pitchChanged = ImGui::DragFloat(
 			"Pitch", &pitchDegrees, 1.f, -89.f, 89.f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp
 		);
@@ -493,7 +502,7 @@ void FirstPersonCamera::gui (fcg::Device&, fcg::Player &player)
 		if (!poseEditError.empty())
 			ImGui::TextWrapped("Cannot set camera pose: %s", poseEditError.c_str());
 		ImGui::SeparatorText("View matrix calculation");
-		for (std::size_t i = 0; i < viewMatrixVariantLabels.size(); ++i) {
+		for (std::size_t i=0; i<viewMatrixVariantLabels.size(); ++i) {
 			const auto variant = static_cast<ViewMatrixVariant>(i);
 			if (ImGui::RadioButton(viewMatrixVariantLabels[i], viewMatrixVariant == variant)) {
 				viewMatrixVariant = variant;
@@ -505,7 +514,9 @@ void FirstPersonCamera::gui (fcg::Device&, fcg::Player &player)
 		ImGui::SliderFloat("Sensitivity", &sensitivity, .01f, 1.f, "%.2f deg", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::TextWrapped("W/S: move forward/backward along the view. A/D: strafe left/right.");
 		ImGui::TextWrapped("Q/E: move down/up along the current view up vector.");
-		ImGui::TextWrapped("Drag with either mouse button to look around. World +Y stays up; pitch is limited to +/-89 degrees.");
+		ImGui::TextWrapped(
+			"Drag with either mouse button to look around. World +Y stays up; pitch is limited to +/-89 degrees."
+		);
 	}
 	ImGui::End();
 }

@@ -55,14 +55,14 @@ namespace fcg {
 ///		the camera looks up.
 void preloadViewMatrix (fcg::RenderState &state, const glm::vec3 &position, float yaw, float pitch);
 
-/// Obtain the view matrix by directly constructing the camera's model transformation (where the camera is in the
-/// world) from the extrinsic parameters (eye, dir, up) and inverting that into a system transformation.
-[[nodiscard]] auto viewMatrixFromInvertedModel (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4;
-
 /// Build the view by expressing the camera orientation (from extrinsic params dir and up) and translation (eye) as
 /// separate model transforms (how the camera is rotated and where it is located in the world), then inverting the
 /// concatenation into a system transformation.
 [[nodiscard]] auto viewMatrixFromInvertedConcatModels (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4;
+
+/// Obtain the view matrix by directly constructing the camera's combined model transformation (how the camera is posed
+/// in the world) from the extrinsic parameters (eye, dir, up) and inverting that into a system transformation.
+[[nodiscard]] auto viewMatrixFromInvertedModel (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4;
 
 /// Build the view by concatenating separate system transforms for orientation (how the scene rotates around the
 /// camera) and translation (how the scene translates relative to the camera).

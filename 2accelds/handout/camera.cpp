@@ -107,27 +107,6 @@ void preloadViewMatrix (fcg::RenderState &state, const glm::vec3 &position, floa
 	state.loadModelviewMatrix(glm::mat4(1.f));
 }
 
-/// Obtain the view matrix by directly constructing the camera's model transformation (where the camera is in the
-/// world) from the extrinsic parameters (eye, dir, up) and inverting that into a system transformation.
-auto viewMatrixFromInvertedModel (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4
-{
-	// Positive camera-local axes expressed in world space. In our right-handed camera convention, the camera looks
-	// along local -Z, so its positive Z axis points opposite to the world-space viewing direction.
-	const glm::vec3 camBaseVecX = glm::normalize(glm::cross(extrinsics.dir, extrinsics.up));
-	const glm::vec3 camBaseVecY = extrinsics.up;
-	const glm::vec3 camBaseVecZ = -extrinsics.dir;
-
-	// TODO: view from the directly assembled camera model transform
-	//  Build the view matrix from the camera axes pre-set above and `extrinsics.eye`. Directly construct the camera
-	//  model transform (move and orient the camera in the world like an object) by initializing its matrix columns, and
-	//  then invert it to obtain the world-to-camera system transform. Store the result in viewMatrix.
-	//
-	//  NOTE: distinguish directions from positions when choosing each homogeneous w-component. Use `glm::inverse` to
-	//  compute matrix inversion.
-	glm::mat4 viewMatrix(1.f);
-	return viewMatrix;
-}
-
 /// Build the view by expressing the camera orientation (from extrinsic params dir and up) and translation (eye) as
 /// separate model transforms (how the camera is rotated and where it is located in the world), then inverting the
 /// concatenation into a system transformation.
@@ -147,6 +126,27 @@ auto viewMatrixFromInvertedConcatModels (const fcg::CameraParameters::Extrinsics
 	//
 	//  NOTE: you can construct each individual model transform by setting its columns (also in-place in the
 	//  constructor). Use `glm::inverse` to compute matrix inversion.
+	glm::mat4 viewMatrix(1.f);
+	return viewMatrix;
+}
+
+/// Obtain the view matrix by directly constructing the camera's combined model transformation (how the camera is posed
+/// in the world) from the extrinsic parameters (eye, dir, up) and inverting that into a system transformation.
+auto viewMatrixFromInvertedModel (const fcg::CameraParameters::Extrinsics &extrinsics) -> glm::mat4
+{
+	// Positive camera-local axes expressed in world space. In our right-handed camera convention, the camera looks
+	// along local -Z, so its positive Z axis points opposite to the world-space viewing direction.
+	const glm::vec3 camBaseVecX = glm::normalize(glm::cross(extrinsics.dir, extrinsics.up));
+	const glm::vec3 camBaseVecY = extrinsics.up;
+	const glm::vec3 camBaseVecZ = -extrinsics.dir;
+
+	// TODO: view from the directly assembled camera model transform
+	//  Build the view matrix from the camera axes pre-set above and `extrinsics.eye`. Directly construct the camera
+	//  model transform (move and orient the camera in the world like an object) by initializing its matrix columns, and
+	//  then invert it to obtain the world-to-camera system transform. Store the result in viewMatrix.
+	//
+	//  NOTE: distinguish directions from positions when choosing each homogeneous w-component. Use `glm::inverse` to
+	//  compute matrix inversion.
 	glm::mat4 viewMatrix(1.f);
 	return viewMatrix;
 }

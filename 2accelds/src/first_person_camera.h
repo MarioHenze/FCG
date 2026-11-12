@@ -164,16 +164,16 @@ private:
 
 	enum class ViewMatrixVariant {
 		OnStackPoseFromParams,
-		InverseOfModel,
 		InverseOfConcatModels,
+		InverseOfModel,
 		ConcatOfSystems
 	};
 
 	/// Labels follow the enum order and also identify the selected calculation in validation warnings.
 	static constexpr std::array<const char*, 4> viewMatrixVariantLabels{
 		"on-stack from [pos,yaw,pitch]",
-		"invert camera model transform",
 		"invert concatenated model transforms",
+		"invert single camera model transform",
 		"concatenate system transforms"
 	};
 
