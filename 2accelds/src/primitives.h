@@ -69,7 +69,7 @@ struct SpherePrimitive
 ///
 /// Inherits sphere intersection and voxelization operations from SpherePrimitive. The center is the vertex
 /// position and the radius comes from the mesh's "v:radius" property, defaulting to zero for a pure point.
-struct VertexPrimitive : SpherePrimitive
+struct VertexPrimitive: SpherePrimitive
 {
 	/// The source vertex in its mesh.
 	OpenMesh::VertexHandle handle{};
