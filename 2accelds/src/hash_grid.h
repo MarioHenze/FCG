@@ -76,6 +76,22 @@ struct std::hash<GridCell>
 	[[nodiscard]] auto operator() (const GridCell &cell) const noexcept -> std::size_t;
 };
 
+/// Cached dimensions and counts of a HashGrid, maintained during construction and rebuilding.
+struct GridInfo
+{
+	/// Actual grid cell extents per axis in world units, after clamping to minCellWidth.
+	glm::vec3 cellWidths{1.f, 1.f, 1.f};
+
+	/// Number of primitives supplied to the current build.
+	std::size_t primitiveCount = 0;
+
+	/// Number of entries in the grid's cell map.
+	std::size_t occupiedCellCount = 0;
+
+	/// Total number of stored primitive indices, counting each occurrence in every overlapped cell.
+	std::size_t primitiveReferenceCount = 0;
+};
+
 /// Map from an occupied grid cell to the indices of the primitives overlapping it.
 using GridCells = std::unordered_map<GridCell, std::vector<std::size_t>>;
 
@@ -252,9 +268,9 @@ public:
 	////
 	// Accessors
 
-	/// The cell widths the grid was built with.
-	[[nodiscard]] auto cellWidths () const noexcept -> const glm::vec3& {
-		return m_cellWidths;
+	/// Read-only cached dimensions and counts; rebuilding updates this instance.
+	[[nodiscard]] auto info () const noexcept -> const GridInfo& {
+		return m_info;
 	}
 
 	/// The indexed primitive store.
@@ -262,14 +278,9 @@ public:
 		return m_primitives;
 	}
 
-	/// Number of indexed primitives.
-	[[nodiscard]] auto primitiveCount () const noexcept -> std::size_t {
-		return std::ranges::size(m_primitives);
-	}
-
 	/// \brief Read one indexed primitive.
 	///
-	/// \param index The primitive index, below primitiveCount().
+	/// \param index The primitive index, below info().primitiveCount.
 	///
 	/// \return The primitive, constructed from the store's element at \p index.
 	[[nodiscard]] auto primitive (std::size_t index) const -> P {
@@ -279,11 +290,6 @@ public:
 	/// The occupied cells mapped to their primitive indices.
 	[[nodiscard]] auto cells () const noexcept -> const MapType& {
 		return m_cells;
-	}
-
-	/// Number of occupied cells.
-	[[nodiscard]] auto occupiedCellCount () const noexcept -> std::size_t {
-		return m_cells.size();
 	}
 
 	/// \brief Find the bucket of one cell.
@@ -317,17 +323,24 @@ public:
 	/// \param cellWidths The new grid cell extents per axis in world units.
 	void rebuild (const glm::vec3 &cellWidths)
 	{
-		// Clamp to strictly positive widths to keep the cell index conversion well-defined
-		m_cellWidths = glm::max(cellWidths, glm::vec3{minCellWidth});
+		// Read the requested widths before resetting metadata, as they may refer to info().cellWidths
+		const auto clampedWidths = glm::max(cellWidths, glm::vec3{minCellWidth});
+		const auto count = std::ranges::size(m_primitives);
 
 		// Voxelize each primitive and record its index in every overlapped cell
 		m_cells.clear();
+		m_info = {.cellWidths=clampedWidths, .primitiveCount=count};
 		std::vector<GridCell> overlapped;
-		for (std::size_t index = 0, count = std::ranges::size(m_primitives); index < count; ++index) {
+		for (std::size_t index = 0; index < count; ++index) {
 			overlapped.clear();
-			primitive(index).voxelize(m_cellWidths, overlapped);
-			for (const auto &cell : overlapped)
-				m_cells[cell].push_back(index);
+			primitive(index).voxelize(m_info.cellWidths, overlapped);
+			for (const auto &cell : overlapped) {
+				auto [bucket, inserted] = m_cells.try_emplace(cell);
+				if (inserted)
+					++m_info.occupiedCellCount;
+				bucket->second.push_back(index);
+				++m_info.primitiveReferenceCount;
+			}
 		}
 	}
 
@@ -339,7 +352,7 @@ public:
 	/// \return The matching primitive indices, sorted ascending, each occurring once.
 	[[nodiscard]] auto queryCuboidIndices (const glm::vec3 &center, const glm::vec3 &halfExtents) const
 		-> std::vector<std::size_t> {
-		return ::queryCuboidIndices<P>(m_cells, m_cellWidths, center, halfExtents, primitiveLookup());
+		return ::queryCuboidIndices<P>(m_cells, m_info.cellWidths, center, halfExtents, primitiveLookup());
 	}
 
 	/// \brief Collect the deduplicated indices of the primitives intersecting a query sphere.
@@ -350,7 +363,7 @@ public:
 	/// \return The matching primitive indices, sorted ascending, each occurring once.
 	[[nodiscard]] auto querySphereIndices (const glm::vec3 &center, float radius) const
 		-> std::vector<std::size_t> {
-		return ::querySphereIndices<P>(m_cells, m_cellWidths, center, radius, primitiveLookup());
+		return ::querySphereIndices<P>(m_cells, m_info.cellWidths, center, radius, primitiveLookup());
 	}
 
 	/// \brief Collect the primitives intersecting an axis-aligned query box.
@@ -404,8 +417,8 @@ private:
 	/// The indexed primitives.
 	Container m_primitives{};
 
-	/// The cell widths the grid was built with; strictly positive per axis.
-	glm::vec3 m_cellWidths{1.f, 1.f, 1.f};
+	/// Cached grid dimensions and counts, updated alongside the cell map.
+	GridInfo m_info{};
 
 	/// The occupied cells mapped to the indices of the primitives overlapping them.
 	MapType m_cells{};

@@ -569,12 +569,15 @@ private:
 			row("Bounds extent", coordinates(metadata.bounds->maximum - metadata.bounds->minimum));
 		}
 		if (hashGrid) {
-			std::size_t references = 0;
-			for (const auto &entry : hashGrid->cells())
-				references += entry.second.size();
-			row("Cell widths", std::format("{:.4g}, {:.4g}, {:.4g}", cellWidths.x, cellWidths.y, cellWidths.z));
-			row("Occupied cells", std::format("{}", hashGrid->occupiedCellCount()));
-			row("Cell references", std::format("{}", references));
+			const auto &info = hashGrid->info();
+			row("Cell widths", std::format("{:.4g}, {:.4g}, {:.4g}",
+				info.cellWidths.x, info.cellWidths.y, info.cellWidths.z));
+			row("Occupied cells", std::format("{}", info.occupiedCellCount));
+			row("Stored references", std::format("{}", info.primitiveReferenceCount));
+			row(
+				"Avg. cells/sphere", std::format("{}",
+				(float)info.primitiveReferenceCount/metadata.vertexCount)
+			);
 		}
 		ImGui::EndTable();
 	}
@@ -583,12 +586,11 @@ private:
 	void displayGridControls (fcg::Player &player)
 	{
 		// Adjusting the cell widths rebuilds the grid in place
-		auto nextWidths = cellWidths;
+		auto nextWidths = hashGrid->info().cellWidths;
 		if (ImGui::DragFloat3("Cell widths", &nextWidths.x, .02f * pointRadius, minCellWidth, 0.f, "%.4g")
-			&& nextWidths != cellWidths)
+			&& nextWidths != hashGrid->info().cellWidths)
 		{
-			cellWidths = glm::max(nextWidths, glm::vec3{minCellWidth});
-			hashGrid->rebuild(cellWidths);
+			hashGrid->rebuild(nextWidths);
 			runQuery();
 			player.requireSceneRedraw();
 		}
@@ -779,7 +781,6 @@ private:
 		metadata = std::move(nextMetadata);
 		spheres = std::move(*nextSpheres);
 		hashGrid = std::move(nextGrid);
-		cellWidths = glm::vec3{2.f * nextRadius};
 		sphereBaseColors = std::move(nextBaseColors);
 		queryCenter = metadata.bounds ? glm::vec3{(metadata.bounds->minimum + metadata.bounds->maximum) * .5}
 			: glm::vec3{};
@@ -883,9 +884,6 @@ private:
 
 	/// Visual cursor tracking the active query volume in the 3D scene.
 	std::optional<QueryCursor> queryCursor;
-
-	/// Cell widths the hash grid was built with; adjustable in the GUI, clamped strictly positive.
-	glm::vec3 cellWidths{1, 1, 1};
 
 	/// Per-vertex sphere colors without query highlighting, restored whenever the query changes.
 	std::vector<glm::vec4> sphereBaseColors;
