@@ -233,6 +233,7 @@ template <Primitive P>
 /// random-access store, which may be an owning container or a zero-copy view of externally owned data. Rebuilding
 /// with new cell widths re-voxelizes the stored primitives; the store itself is left untouched.
 /// Query engines are explicitly instantiated per primitive type in hash_grid.cpp, independently of the container.
+/// Linear reference queries scan the primitive store directly, independently of the cell map.
 ///
 /// \tparam P The indexed primitive type, satisfying the Primitive concept.
 /// \tparam Container The primitive store, satisfying the PrimitiveStore concept for \c P.
@@ -364,6 +365,48 @@ public:
 	[[nodiscard]] auto querySphereIndices (const glm::vec3 &center, float radius) const
 		-> std::vector<std::size_t> {
 		return ::querySphereIndices<P>(m_cells, m_info.cellWidths, center, radius, primitiveLookup());
+	}
+
+	/// \brief Linearly collect the indices of the primitives intersecting an axis-aligned query box.
+	///
+	/// Tests every stored primitive once, independently of the grid's cell assignments. This reference query can be
+	/// used to check the accelerated query or as a fallback while it is not implemented.
+	///
+	/// \param center Finite box center in world coordinates.
+	/// \param halfExtents Finite, nonnegative box half-extents per axis in world units.
+	///
+	/// \return The matching primitive indices, sorted ascending, each occurring once; boundary contacts count.
+	[[nodiscard]] auto queryCuboidIndicesLinear (const glm::vec3 &center, const glm::vec3 &halfExtents) const
+		-> std::vector<std::size_t>
+	{
+		const glm::vec3 minCorner = center - halfExtents;
+		const glm::vec3 maxCorner = center + halfExtents;
+		std::vector<std::size_t> indices;
+		const auto count = std::ranges::size(m_primitives);
+		for (std::size_t index = 0; index < count; ++index)
+			if (primitive(index).intersectsBox(minCorner, maxCorner))
+				indices.push_back(index);
+		return indices;
+	}
+
+	/// \brief Linearly collect the indices of the primitives intersecting a query sphere.
+	///
+	/// Tests every stored primitive once, independently of the grid's cell assignments. This reference query can be
+	/// used to check the accelerated query or as a fallback while it is not implemented.
+	///
+	/// \param center Finite sphere center in world coordinates.
+	/// \param radius Finite, nonnegative sphere radius in world units.
+	///
+	/// \return The matching primitive indices, sorted ascending, each occurring once; boundary contacts count.
+	[[nodiscard]] auto querySphereIndicesLinear (const glm::vec3 &center, float radius) const
+		-> std::vector<std::size_t>
+	{
+		std::vector<std::size_t> indices;
+		const auto count = std::ranges::size(m_primitives);
+		for (std::size_t index = 0; index < count; ++index)
+			if (primitive(index).intersectsSphere(center, radius))
+				indices.push_back(index);
+		return indices;
 	}
 
 	/// \brief Collect the primitives intersecting an axis-aligned query box.

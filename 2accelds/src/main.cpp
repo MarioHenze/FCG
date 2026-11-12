@@ -5,6 +5,7 @@
 //
 
 // C++ STL
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <expected>
@@ -587,9 +588,26 @@ private:
 	{
 		// Adjusting the cell widths rebuilds the grid in place
 		auto nextWidths = hashGrid->info().cellWidths;
-		if (ImGui::DragFloat3("Cell widths", &nextWidths.x, .02f * pointRadius, minCellWidth, 0.f, "%.4g")
-			&& nextWidths != hashGrid->info().cellWidths)
+		bool widthsChanged = ImGui::DragFloat3(
+			"Cell widths", &nextWidths.x, 1/64.f*pointRadius, minCellWidth, 0, "%.4g"
+		);
+		float uniformWidth = nextWidths.x;
+		// Limit uniform cells to one quarter of the smallest scene extent
+		const glm::dvec3 extent = metadata.bounds
+			? metadata.bounds->maximum - metadata.bounds->minimum : glm::dvec3{};
+		const float maxUniformWidth = glm::max(
+			minCellWidth, .25f * (float)glm::min(extent.x, glm::min(extent.y, extent.z))
+		);
+		const float minUniformWidth = glm::min(maxUniformWidth, glm::max(minCellWidth, .5f*pointRadius));
+		ImGui::BeginDisabled(minUniformWidth == maxUniformWidth);
+		if (ImGui::SliderFloat("...all", &uniformWidth, minUniformWidth, maxUniformWidth, "%.4g",
+			ImGuiSliderFlags_AlwaysClamp |  ImGuiSliderFlags_Logarithmic))
 		{
+			nextWidths = glm::vec3{uniformWidth};
+			widthsChanged = true;
+		}
+		ImGui::EndDisabled();
+		if (widthsChanged && nextWidths != hashGrid->info().cellWidths) {
 			hashGrid->rebuild(nextWidths);
 			runQuery();
 			player.requireSceneRedraw();
@@ -599,9 +617,15 @@ private:
 		bool queryChanged = false;
 		queryChanged |= ImGui::Checkbox("Radius query", &queryEnabled);
 		ImGui::BeginDisabled(!queryEnabled);
+		queryChanged |= ImGui::Checkbox("Force linear scan", &forceLinearScan);
 		queryChanged |= ImGui::Combo("Query shape", &queryShape, "Cuboid\0Sphere\0");
-		queryChanged |= ImGui::DragFloat3("Query center", &queryCenter.x, .02f * pointRadius, 0.f, 0.f, "%.4g");
-		queryChanged |= ImGui::DragFloat("Query radius", &queryRadius, .02f * pointRadius, 0.f, 0.f, "%.4g");
+		queryChanged |= ImGui::DragFloat3(
+			"Query center", &queryCenter.x, 1/64.f*queryRadius, 0.f, 0.f, "%.4g"
+		);
+		queryChanged |= ImGui::DragFloat(
+			"Query radius", &queryRadius, 1/128.f*queryRadius, .5f*pointRadius,
+			.5f*glm::max(extent.x, glm::max(extent.y, extent.z)), "%.4g"
+		);
 		ImGui::EndDisabled();
 
 		// Keep cursor and selection colors editable while the query is disabled
@@ -616,13 +640,29 @@ private:
 			runQuery();
 			player.requireSceneRedraw();
 		}
-		if (queryEnabled)
-			ImGui::Text("Matched points: %zu", queryMatches);
+		if (queryEnabled) {
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Matched points: %zu", queryMatches); ImGui::SameLine();
+			if (ImGui::Button("Rerun query")) {
+				runQuery();
+				player.requireSceneRedraw();
+			}
+			if (lastQueryMilliseconds) {
+				const char *method = forceLinearScan||queryUsedLinearFallback ? "Linear fallback" : "Grid-accelerated";
+				ImGui::Text("Last query time: %.3f ms (%s)", *lastQueryMilliseconds, method);
+			} else {
+				ImGui::TextUnformatted("Last query time: unavailable");
+			}
+		}
 	}
 
-	/// Run the configured radius query, highlight the matched spheres and surface student TODOs without crashing.
+	/// Run and time the configured query, reporting student TODOs before falling back to a linear scan.
 	void runQuery ()
 	{
+		lastQueryMilliseconds.reset();
+		queryUsedLinearFallback = false;
+		queryMatches = 0;
+
 		// Nothing to highlight without spheres
 		if (!spheres)
 			return;
@@ -631,12 +671,32 @@ private:
 		error.clear();
 		auto colors = sphereBaseColors;
 		const glm::vec4 highlightColor{selectionColor, 1.f};
-		queryMatches = 0;
 		if (queryEnabled && hashGrid) {
 			try {
-				const auto indices = queryShape == 0
-					? hashGrid->queryCuboidIndices(queryCenter, glm::vec3{queryRadius})
-					: hashGrid->querySphereIndices(queryCenter, queryRadius);
+				std::vector<std::size_t> indices;
+				auto started = std::chrono::steady_clock::now();
+				if (!forceLinearScan) {
+					try {
+						indices = queryShape == 0
+							? hashGrid->queryCuboidIndices(queryCenter, glm::vec3{queryRadius})
+							: hashGrid->querySphereIndices(queryCenter, queryRadius);
+					}
+					catch (const std::logic_error &exception) {
+						reportError(exception.what());
+						queryUsedLinearFallback = true;
+					}
+				}
+				if (forceLinearScan || queryUsedLinearFallback) {
+					// Exclude the failed attempt and its feedback from the linear query's duration
+					started = std::chrono::steady_clock::now();
+					indices = queryShape == 0
+						? hashGrid->queryCuboidIndicesLinear(queryCenter, glm::vec3{queryRadius})
+						: hashGrid->querySphereIndicesLinear(queryCenter, queryRadius);
+				}
+				const auto finished = std::chrono::steady_clock::now();
+				lastQueryMilliseconds = std::chrono::duration<double, std::milli>(finished - started).count();
+
+				// Highlighting and GPU updates are outside the timed query
 				queryMatches = indices.size();
 				for (const auto index : indices)
 					if (index < colors.size())
@@ -891,6 +951,9 @@ private:
 	/// Whether the interactive radius query is active.
 	bool queryEnabled = false;
 
+	/// Bypass the accelerated query and scan the primitive store directly.
+	bool forceLinearScan = false;
+
 	/// Query shape: 0 selects the cuboid query, 1 the spherical query.
 	int queryShape = 0;
 
@@ -908,6 +971,12 @@ private:
 
 	/// Number of primitives matched by the most recent query.
 	std::size_t queryMatches = 0;
+
+	/// Duration of the most recent successful query in milliseconds, excluding rendering and TODO reporting.
+	std::optional<double> lastQueryMilliseconds;
+
+	/// Whether the latest query used a linear scan after an accelerated query threw.
+	bool queryUsedLinearFallback = false;
 
 	/// The sphere renderer we use.
 	std::optional<fcg::EllipsoidRenderer> sphereRenderer;
