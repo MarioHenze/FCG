@@ -23,15 +23,14 @@
 ////
 // SpherePrimitive
 
-auto SpherePrimitive::intersectsSphere (const glm::vec3 &center, float radius) const -> bool
-{
+auto SpherePrimitive::intersectsSphere (const glm::vec3 &center, float radius) const -> bool {
+	// A sphere overlaps when the distance between both centers is less than or equal to the sum of their radii
 	const glm::vec3 offset = position - center;
 	const float combinedRadius = this->radius + radius;
 	return glm::dot(offset, offset) <= combinedRadius * combinedRadius;
 }
 
-auto SpherePrimitive::intersectsBox (const glm::vec3 &minCorner, const glm::vec3 &maxCorner) const -> bool
-{
+auto SpherePrimitive::intersectsBox (const glm::vec3 &minCorner, const glm::vec3 &maxCorner) const -> bool {
 	// A sphere overlaps the box when its center is within radius of the closest box point
 	const glm::vec3 closest = glm::clamp(position, minCorner, maxCorner);
 	const glm::vec3 offset = position - closest;
@@ -54,12 +53,16 @@ void SpherePrimitive::voxelize (const glm::vec3 &cellWidths, std::vector<GridCel
 			}
 }
 
+// Check that we fulfill the Primitive concept
+static_assert(Primitive<SpherePrimitive>);
+
 
 ////
 // VertexPrimitive
 
 VertexPrimitive::VertexPrimitive (const OpenMesh::SmartVertexHandle &vh)
-	: VertexPrimitive(*static_cast<const fcg::Mesh*>(vh.mesh()), vh) {}
+	: VertexPrimitive(*static_cast<const fcg::Mesh*>(vh.mesh()), vh)
+{}
 
 VertexPrimitive::VertexPrimitive (const fcg::Mesh &mesh, OpenMesh::VertexHandle vh) : handle(vh)
 {
@@ -77,6 +80,5 @@ VertexPrimitive::VertexPrimitive (const fcg::Mesh &mesh, OpenMesh::VertexHandle 
 		radius = mesh.property(property, vh);
 }
 
-
-static_assert(Primitive<SpherePrimitive>);
+// Check that we fulfill the Primitive concept
 static_assert(Primitive<VertexPrimitive>);

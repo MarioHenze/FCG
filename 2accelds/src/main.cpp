@@ -602,13 +602,15 @@ private:
 		queryChanged |= ImGui::DragFloat("Query radius", &queryRadius, .02f * pointRadius, 0.f, 0.f, "%.4g");
 		ImGui::EndDisabled();
 
-		// Keep both cursor colors editable while the query is disabled
-		constexpr auto colorFlags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_AlphaBar;
-		queryChanged |= ImGui::ColorEdit4("Cuboid", &cuboidCursorColor.x, colorFlags);
-		queryChanged |= ImGui::ColorEdit4("Sphere", &sphereCursorColor.x, colorFlags);
+		// Keep cursor and selection colors editable while the query is disabled
+		ImGui::PushItemWidth(-ImGui::CalcTextSize("Selection highlight").x - ImGui::GetStyle().ItemInnerSpacing.x);
+		queryChanged |= ImGui::ColorEdit4("Cursor", &cursorColor.x,
+			ImGuiColorEditFlags_Float | ImGuiColorEditFlags_AlphaBar);
+		queryChanged |= ImGui::ColorEdit3("Selection highlight", &selectionColor.x, ImGuiColorEditFlags_Float);
+		ImGui::PopItemWidth();
 		if (queryChanged) {
-			cuboidCursorColor = glm::clamp(cuboidCursorColor, 0.f, 1.f);
-			sphereCursorColor = glm::clamp(sphereCursorColor, 0.f, 1.f);
+			cursorColor = glm::clamp(cursorColor, 0.f, 1.f);
+			selectionColor = glm::clamp(selectionColor, 0.f, 1.f);
 			runQuery();
 			player.requireSceneRedraw();
 		}
@@ -626,8 +628,7 @@ private:
 		// Recolor the matched spheres, starting from the unhighlighted base colors
 		error.clear();
 		auto colors = sphereBaseColors;
-		const auto &cursorColor = queryShape == 0 ? cuboidCursorColor : sphereCursorColor;
-		const glm::vec4 highlightColor{glm::vec3{cursorColor}, 1.f};
+		const glm::vec4 highlightColor{selectionColor, 1.f};
 		queryMatches = 0;
 		if (queryEnabled && hashGrid) {
 			try {
@@ -884,7 +885,7 @@ private:
 	std::optional<QueryCursor> queryCursor;
 
 	/// Cell widths the hash grid was built with; adjustable in the GUI, clamped strictly positive.
-	glm::vec3 cellWidths{1.f, 1.f, 1.f};
+	glm::vec3 cellWidths{1, 1, 1};
 
 	/// Per-vertex sphere colors without query highlighting, restored whenever the query changes.
 	std::vector<glm::vec4> sphereBaseColors;
@@ -895,17 +896,17 @@ private:
 	/// Query shape: 0 selects the cuboid query, 1 the spherical query.
 	int queryShape = 0;
 
-	/// Cuboid cursor RGBA; its RGB also colors opaque query matches.
-	glm::vec4 cuboidCursorColor{1, 0, 1, 2/3.f};
+	/// Cursor RGBA shared by both query shapes, including its opacity.
+	glm::vec4 cursorColor{1, .125f, 1, 2/3.f};
 
-	/// Spherical cursor RGBA; its RGB also colors opaque query matches.
-	glm::vec4 sphereCursorColor{1, 0, 1, 2/3.f};
+	/// Selection highlight RGB; matching point spheres are always opaque.
+	glm::vec3 selectionColor{1, 0, 1};
 
 	/// Center of the query volume in world coordinates.
 	glm::vec3 queryCenter{};
 
 	/// Query radius in world units; per-axis half-extent for the cuboid, radius for the sphere.
-	float queryRadius = 0.f;
+	float queryRadius = 1;
 
 	/// Number of primitives matched by the most recent query.
 	std::size_t queryMatches = 0;
